@@ -1,7 +1,7 @@
 // Magpie service worker. Offline shell and share-target hand-off only.
 // Journal data lives in IndexedDB, encrypted, and never touches a cache.
 
-const VERSION = "magpie-v0.1.0";
+const VERSION = "magpie-v0.2.0";
 const SHARE_CACHE = "magpie-share";
 
 const PRECACHE = [
