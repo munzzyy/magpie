@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+The journal grows a spine, a backup, and a longer memory.
+
+- The timeline draws its chain: a spine, a dot and hash chip per entry, an
+  anchor line saying how far the record is pinned, and a sealing snap when
+  an entry joins.
+- Sealed backup and restore: one encrypted envelope under the vault key,
+  only the key-derivation parameters readable outside it. Restore verifies
+  the whole chain in memory before a byte lands, with five distinct
+  refusal codes for everything that can be wrong.
+- verify.py --extends proves one export is an append-only extension of
+  another; exports self-verify before they can leave the app.
+- Multi-file attach, in-memory search that a lock wipes, a first-run empty
+  state, and a wrong-passphrase shake that still announces itself.
+
 ## 0.2.0
 
 The iOS round.
