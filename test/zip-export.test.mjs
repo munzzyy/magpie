@@ -7,13 +7,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { buildZip, crc32 } from "../app/js/zip.js";
+import { buildZip, crc32, readZip } from "../app/js/zip.js";
 import { canonical, makeEntry } from "../app/js/canon.js";
 import { entryHash, GENESIS, sha256Hex } from "../app/js/chain.js";
-import { VERIFY_PY, VERIFY_MD } from "../app/js/export.js";
+import { VERIFY_PY, VERIFY_MD, selfVerifyExport } from "../app/js/export.js";
 
 const enc = new TextEncoder();
 
@@ -98,6 +98,92 @@ test("verify.py independently verifies a JS-built export, and catches tampering"
     writeFileSync(path.join(dir, "entries.json"), JSON.stringify(entries));
     writeFileSync(path.join(dir, "files", "002-proof.txt"), enc.encode("different bytes"));
     assert.throws(() => execFileSync("python3", [path.join(dir, "verify.py")], { stdio: "pipe" }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("readZip is the exact mirror of buildZip", () => {
+  const files = [
+    { name: "a.txt", bytes: enc.encode("hello") },
+    { name: "dir/b.bin", bytes: Uint8Array.from({ length: 300 }, (_, i) => i % 256) },
+    { name: "unicode ✓.txt", bytes: enc.encode("body ✓") },
+  ];
+  const zip = buildZip(files);
+  const read = readZip(zip);
+  assert.deepEqual(
+    read.map((f) => f.name),
+    files.map((f) => f.name),
+  );
+  for (let i = 0; i < files.length; i++) assert.deepEqual([...read[i].bytes], [...files[i].bytes]);
+});
+
+test("selfVerifyExport accepts a correct export and rejects tampering, both in the manifest and in the zip bytes", async () => {
+  const entry = makeEntry({ seq: 1, ts: "2026-09-06T12:00:01.000Z", type: "note", title: "t", note: "n", file: null });
+  const head = await entryHash(GENESIS, entry);
+  const entriesOut = [JSON.parse(canonical(entry))];
+  const manifest = { format: "magpie-export", v: 1, genesis: GENESIS, head, count: 1, generated_at: "2026-09-06T12:00:00.000Z" };
+  const zip = buildZip([
+    { name: "manifest.json", bytes: enc.encode(JSON.stringify(manifest)) },
+    { name: "entries.json", bytes: enc.encode(JSON.stringify(entriesOut)) },
+    { name: "VERIFY.md", bytes: enc.encode(VERIFY_MD) },
+    { name: "verify.py", bytes: enc.encode(VERIFY_PY) },
+  ]);
+  await assert.doesNotReject(selfVerifyExport(zip, manifest, entriesOut));
+
+  // Negative control: the manifest recorded a head that does not match the entries.
+  await assert.rejects(selfVerifyExport(zip, { ...manifest, head: "0".repeat(64) }, entriesOut));
+
+  // Negative control: a byte flips inside manifest.json's own file data,
+  // right after its local header and name ("manifest.json", 13 bytes).
+  const corrupted = zip.slice();
+  const dataStart = 30 + "manifest.json".length;
+  corrupted[dataStart + 5] ^= 0xff;
+  await assert.rejects(selfVerifyExport(corrupted, manifest, entriesOut));
+});
+
+test("verify.py --extends proves one export is an append-only extension of another, and refuses a fork", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "magpie-extends-"));
+  try {
+    let prev = GENESIS;
+    const chain = [];
+    for (let seq = 1; seq <= 4; seq++) {
+      const entry = makeEntry({ seq, ts: `2026-09-06T12:00:0${seq}.000Z`, type: "note", title: `t${seq}`, note: `n${seq}`, file: null });
+      prev = await entryHash(prev, entry);
+      chain.push({ out: JSON.parse(canonical(entry)), head: prev });
+    }
+    const writeExport = (dest, entries, head) => {
+      mkdirSync(dest, { recursive: true });
+      const manifest = { format: "magpie-export", v: 1, genesis: GENESIS, head, count: entries.length };
+      writeFileSync(path.join(dest, "manifest.json"), JSON.stringify(manifest));
+      writeFileSync(path.join(dest, "entries.json"), JSON.stringify(entries));
+      writeFileSync(path.join(dest, "verify.py"), VERIFY_PY);
+    };
+
+    const older = path.join(dir, "older");
+    const newer = path.join(dir, "newer");
+    writeExport(older, chain.slice(0, 2).map((c) => c.out), chain[1].head);
+    writeExport(newer, chain.map((c) => c.out), chain[3].head);
+
+    const out = execFileSync("python3", [path.join(newer, "verify.py"), "--extends", older], { encoding: "utf8" });
+    assert.match(out, /EXTENDS: this export is an append-only continuation/);
+
+    // Negative control: a rival export that is internally 100% valid, and
+    // shares entry 1 with the older export, but diverges at entry 2. Being
+    // self-consistent is not enough; it must match the older head exactly.
+    let rivalPrev = chain[0].head;
+    const rivalEntry2 = makeEntry({ seq: 2, ts: chain[1].out.ts, type: "note", title: "t2", note: "DIFFERENT", file: null });
+    rivalPrev = await entryHash(rivalPrev, rivalEntry2);
+    const rivalEntry3 = makeEntry({ seq: 3, ts: "2026-09-06T12:00:09.000Z", type: "note", title: "t3", note: "n3", file: null });
+    rivalPrev = await entryHash(rivalPrev, rivalEntry3);
+    const rival = path.join(dir, "rival");
+    writeExport(rival, [chain[0].out, JSON.parse(canonical(rivalEntry2)), JSON.parse(canonical(rivalEntry3))], rivalPrev);
+
+    assert.throws(() => execFileSync("python3", [path.join(rival, "verify.py"), "--extends", older], { stdio: "pipe" }));
+    // But the rival still verifies fine on its own: this proves --extends
+    // is catching genuine divergence, not just any old failure.
+    const rivalOk = execFileSync("python3", [path.join(rival, "verify.py")], { encoding: "utf8" });
+    assert.match(rivalOk, /^OK: 3 entries verify/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

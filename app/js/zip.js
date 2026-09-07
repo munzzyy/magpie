@@ -69,3 +69,44 @@ export function buildZip(files) {
   }
   return out;
 }
+
+// Store-only ZIP reader, the exact mirror of buildZip above. It reads back
+// nothing this file did not write itself: any compression method other than
+// store, or a CRC that does not match, is treated as corruption, not
+// tolerated. Used to self-verify a built export before it can leave the app.
+export function readZip(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  const floor = Math.max(0, bytes.length - 22 - 0xffff);
+  for (let i = bytes.length - 22; i >= floor; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("not a zip: no end-of-central-directory record");
+  const count = dv.getUint16(eocd + 10, true);
+  const centralStart = dv.getUint32(eocd + 16, true);
+  const dec = new TextDecoder();
+  const files = [];
+  let p = centralStart;
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > bytes.length || dv.getUint32(p, true) !== 0x02014b50) {
+      throw new Error("not a zip: bad central directory entry");
+    }
+    const method = dv.getUint16(p + 10, true);
+    const crc = dv.getUint32(p + 16, true);
+    const size = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const localOffset = dv.getUint32(p + 42, true);
+    const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    p += 46 + nameLen;
+    if (method !== 0) throw new Error(`${name}: only the store method is supported`);
+    const localNameLen = dv.getUint16(localOffset + 26, true);
+    const dataStart = localOffset + 30 + localNameLen;
+    const data = bytes.slice(dataStart, dataStart + size);
+    if (crc32(data) !== crc) throw new Error(`${name}: CRC mismatch, archive is corrupt`);
+    files.push({ name, bytes: data });
+  }
+  return files;
+}

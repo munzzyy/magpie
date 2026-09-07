@@ -17,6 +17,15 @@ export class LockedError extends Error {
   }
 }
 
+// Thrown by restoreBackup with a stable machine-readable code (never raw
+// English) so the UI can translate the reason instead of showing it as-is.
+export class RestoreBlockedError extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+}
+
 let db = null;
 let key = null;
 let head = GENESIS;
@@ -59,6 +68,27 @@ const get = (store, k) =>
       new Promise((resolve, reject) => {
         const req = d.transaction(store).objectStore(store).get(k);
         req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+      }),
+  );
+
+// Every {key, value} pair in a store, in cursor order, read inside one
+// transaction so a concurrent write cannot interleave a partial view.
+const getAllWithKeys = (store) =>
+  idb().then(
+    (d) =>
+      new Promise((resolve, reject) => {
+        const out = [];
+        const req = d.transaction(store).objectStore(store).openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (cursor) {
+            out.push({ key: cursor.key, value: cursor.value });
+            cursor.continue();
+          } else {
+            resolve(out);
+          }
+        };
         req.onerror = () => reject(req.error);
       }),
   );
@@ -128,6 +158,31 @@ async function saveState() {
   const box = await sealText(key, JSON.stringify({ head, count }), "state");
   await tx("meta", "readwrite", (s) => {
     s.put(box, "state");
+  });
+}
+
+// The anchor record: proof that a export was actually handed off, and
+// through which entry. It carries the same information the old plaintext
+// "magpie-last-export" localStorage timestamp did, but sealed under the
+// vault key like everything else the vault remembers; a device backup or a
+// stolen localStorage dump used to leak "this vault has been active since
+// roughly X" for free, and now it does not.
+export async function getAnchor() {
+  guard();
+  const box = await get("meta", "anchor");
+  if (!box) return null;
+  try {
+    return JSON.parse(await openText(key, box, "anchor"));
+  } catch {
+    return null;
+  }
+}
+
+export async function setAnchor(anchor) {
+  guard();
+  const box = await sealText(key, JSON.stringify(anchor), "anchor");
+  await tx("meta", "readwrite", (s) => {
+    s.put(box, "anchor");
   });
 }
 
@@ -272,4 +327,172 @@ export async function wipe() {
         t.onerror = () => reject(t.error);
       }),
   );
+}
+
+// -------------------------------------------------------------- backup
+
+// A sealed backup is ONE encrypted envelope: every record is unpacked from
+// IndexedDB, bundled into a single plaintext blob, and sealed as one
+// AES-GCM box under the live vault key. Nothing about that bundle is
+// visible from outside the box, not the entry count, not the per-entry
+// hashes, not the head, not when it was made: the only plaintext left in
+// the file is the KDF salt and iteration count, which have to stay
+// readable to derive a key from a passphrase at all, exactly like the
+// vault's own meta.kdf record already is. Restoring needs the exact
+// passphrase that sealed it: deriving the wrong key and failing to open
+// this envelope look identical, on purpose, because AES-GCM cannot (and
+// should not be made to) tell "wrong key" apart from "tampered ciphertext".
+
+const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
+const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const boxOut = (box) => ({ iv: toB64(box.iv), ct: toB64(box.ct) });
+const boxIn = (o) => ({ iv: fromB64(o.iv), ct: fromB64(o.ct) });
+
+export async function exportBackup() {
+  guard();
+  const kdf = await get("meta", "kdf");
+  const state = await get("meta", "state");
+  const anchor = await get("meta", "anchor");
+  const entryRows = await getAllWithKeys("entries");
+  const fileRows = await getAllWithKeys("files");
+  const inner = {
+    kdf: { check: boxOut(kdf.check) },
+    state: state ? boxOut(state) : null,
+    anchor: anchor ? boxOut(anchor) : null,
+    entries: entryRows.map(({ key: seq, value }) => ({ seq, hash: value.hash, box: boxOut(value.box) })),
+    files: fileRows.map(({ key: seq, value }) => ({ seq, box: boxOut(value) })),
+    generated_at: new Date().toISOString(),
+  };
+  const outer = await seal(key, new TextEncoder().encode(JSON.stringify(inner)), "backup");
+  const out = {
+    format: "magpie-backup",
+    v: 2,
+    salt: toB64(kdf.salt),
+    iters: kdf.iters,
+    box: boxOut(outer),
+  };
+  return new TextEncoder().encode(JSON.stringify(out));
+}
+
+// Restores a sealed backup, but only onto a device with no journal yet: a
+// silent overwrite of a live vault is worse than refusing. The outer
+// envelope is opened first; only once that succeeds does anything inside
+// it exist in memory, and the chain is recomputed and every attachment
+// opened BEFORE anything reaches storage, so a tampered or corrupt backup
+// writes nothing at all, not even a partial vault.
+export async function restoreBackup(bytes, passphrase) {
+  if (await isSetUp()) throw new RestoreBlockedError("already-set-up");
+
+  let parsed;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new RestoreBlockedError("not-a-backup");
+  }
+  if (
+    parsed?.format !== "magpie-backup" ||
+    parsed.v !== 2 ||
+    typeof parsed.salt !== "string" ||
+    !Number.isFinite(parsed.iters) ||
+    typeof parsed.box?.iv !== "string" ||
+    typeof parsed.box?.ct !== "string"
+  ) {
+    // Also what an untouched v1 (pre-outer-envelope) backup file hits: that
+    // format never shipped, and there is no migration path for it.
+    throw new RestoreBlockedError("not-a-backup");
+  }
+
+  let salt, k;
+  try {
+    salt = fromB64(parsed.salt);
+    k = await deriveKey(passphrase, salt, parsed.iters);
+  } catch {
+    throw new RestoreBlockedError("not-a-backup");
+  }
+
+  let inner;
+  try {
+    const plaintext = await open(k, boxIn(parsed.box), "backup");
+    inner = JSON.parse(new TextDecoder().decode(plaintext));
+  } catch {
+    throw new RestoreBlockedError("wrong-passphrase");
+  }
+
+  // A genuine backup always carries a state box: setup() writes one in the
+  // same breath it writes the KDF record. One stripped out is a hollowed-out
+  // tamper wearing an empty vault's clothes, not a legitimately empty vault,
+  // and the outer envelope opening cleanly does not excuse it.
+  if (!inner || typeof inner !== "object" || !inner.kdf?.check || !inner.state) {
+    throw new RestoreBlockedError("corrupt");
+  }
+
+  let checkText;
+  try {
+    checkText = await openText(k, boxIn(inner.kdf.check), "check");
+  } catch {
+    throw new RestoreBlockedError("corrupt");
+  }
+  if (checkText !== CHECK_TEXT) throw new RestoreBlockedError("corrupt");
+
+  const decrypted = [];
+  for (const e of inner.entries || []) {
+    let entry;
+    try {
+      entry = JSON.parse(await openText(k, boxIn(e.box), `entry:${e.seq}`));
+    } catch {
+      throw new RestoreBlockedError("corrupt");
+    }
+    decrypted.push({ entry, hash: e.hash });
+  }
+  decrypted.sort((a, b) => a.entry.seq - b.entry.seq);
+
+  let recordedHead;
+  try {
+    recordedHead = JSON.parse(await openText(k, boxIn(inner.state), "state")).head;
+  } catch {
+    throw new RestoreBlockedError("corrupt");
+  }
+
+  const result = await verifyChain(
+    decrypted.map((r) => r.entry),
+    decrypted.map((r) => r.hash),
+    recordedHead,
+  );
+  if (!result.ok) throw new RestoreBlockedError("chain-invalid");
+
+  // A green chain over a hollowed-out backup is the same failure mode
+  // verify() already refuses to certify: every entry that claims a file
+  // must actually have one, and it must open.
+  const fileMap = new Map((inner.files || []).map((f) => [f.seq, f.box]));
+  for (const { entry } of decrypted) {
+    if (!entry.file) continue;
+    const box = fileMap.get(entry.seq);
+    if (!box) throw new RestoreBlockedError("corrupt");
+    try {
+      await open(k, boxIn(box), `file:${entry.seq}`);
+    } catch {
+      throw new RestoreBlockedError("corrupt");
+    }
+  }
+
+  const d = await idb();
+  await new Promise((resolve, reject) => {
+    const t = d.transaction(["meta", "entries", "files"], "readwrite");
+    t.objectStore("meta").put({ salt, iters: parsed.iters, check: boxIn(inner.kdf.check) }, "kdf");
+    t.objectStore("meta").put(boxIn(inner.state), "state");
+    if (inner.anchor) t.objectStore("meta").put(boxIn(inner.anchor), "anchor");
+    for (const e of inner.entries || []) t.objectStore("entries").put({ box: boxIn(e.box), hash: e.hash }, e.seq);
+    for (const f of inner.files || []) t.objectStore("files").put(boxIn(f.box), f.seq);
+    t.oncomplete = resolve;
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+
+  key = k;
+  head = result.head;
+  count = result.count;
+  try {
+    await navigator.storage?.persist?.();
+  } catch {}
+  return { count };
 }

@@ -37,6 +37,19 @@
       <p id="setup-pass-rule" class="warn-line" data-i18n>At least 8 characters. There is no reset and no recovery. If this passphrase is lost, the journal is gone. Four random words you can remember beat clever symbols you cannot.</p>
       <button class="btn-primary" type="submit" data-testid="setup-create" data-i18n>Create</button>
     </form>
+
+    <details class="restore-block card">
+      <summary data-i18n>Restore from a sealed backup</summary>
+      <form id="restore-form" class="form">
+        <label data-i18n for="restore-file">Backup file</label>
+        <input id="restore-file" type="file" accept=".magpiebackup,application/json" required>
+        <label data-i18n for="restore-pass">Passphrase</label>
+        <input id="restore-pass" type="password" autocomplete="current-password" required aria-describedby="restore-error">
+        <p id="restore-error" class="warn-line" hidden></p>
+        <p class="hint-line" data-i18n>Restores only onto a device with no journal yet, and only after the whole chain re-verifies from the backup itself.</p>
+        <button class="btn-primary" type="submit" data-i18n>Restore</button>
+      </form>
+    </details>
   </div>
 
   <div class="web-only landing">
@@ -100,8 +113,25 @@
     <button id="btn-lock" class="icon-btn" data-i18n-attr="aria-label" aria-label="Lock now" title="Lock">🔒</button>
   </header>
 
+  <p id="anchor-line" class="hint-line anchor-line" role="status"></p>
+
+  <div id="search-row" class="search-row" hidden>
+    <label class="sr-only" data-i18n for="search-timeline">Search entries</label>
+    <input id="search-timeline" type="search" data-i18n-attr="placeholder" placeholder="Search titles and notes" autocomplete="off">
+  </div>
+
   <ul id="timeline" class="timeline"></ul>
-  <p id="timeline-empty" class="empty" hidden data-i18n>Nothing here yet. The first entry starts the chain.</p>
+  <p id="search-no-match" class="empty" hidden data-i18n>No entries match.</p>
+  <div id="timeline-empty" class="empty" hidden>
+    <svg class="empty-art" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <circle cx="20" cy="44" r="4" fill="currentColor"></circle>
+      <circle cx="44" cy="20" r="4" fill="currentColor"></circle>
+      <path d="M20 44 L44 20" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4" fill="none"></path>
+      <circle cx="32" cy="32" r="9" fill="none" stroke="currentColor" stroke-width="2"></circle>
+    </svg>
+    <p class="empty-title" data-i18n>Nothing here yet. The first entry starts the chain.</p>
+    <p class="empty-sub" data-i18n>Every entry after it hashes back to this one. There is no entry zero, only whichever you write first.</p>
+  </div>
 
   <div class="addbar">
     <button id="btn-add" class="btn-primary" data-testid="add" data-i18n>Add entry</button>
@@ -117,6 +147,8 @@
         <option value="300" data-i18n>5 minutes</option>
       </select>
       <p id="export-reminder" class="hint-line" role="status"></p>
+      <button id="btn-backup" class="btn-ghost" data-i18n>Download a sealed backup</button>
+      <p class="hint-line" data-i18n>A sealed backup is your own ciphertext in one file: safe to park anywhere, useless to anyone without your passphrase. It restores only onto an empty device.</p>
       <p id="wipe-warn" class="warn-line" data-i18n>Delete everything: type DELETE below and press the button. There is no undo and no copy anywhere else.</p>
       <label for="wipe-confirm" data-i18n>Type DELETE to confirm</label>
       <input id="wipe-confirm" type="text" autocomplete="off" aria-describedby="wipe-warn">
@@ -139,7 +171,7 @@
     <div class="attach-row">
       <button type="button" id="btn-attach" class="btn-ghost" data-i18n>Attach a file</button>
       <button type="button" id="btn-camera" class="btn-ghost" hidden data-i18n>Take a photo</button>
-      <input id="attach-input" type="file" hidden>
+      <input id="attach-input" type="file" multiple hidden>
     </div>
     <p id="attach-name" class="attach-name" hidden></p>
     <p class="hint-line" data-i18n>Attached photos keep their own metadata, including location if your camera records it. That is often part of the evidence; if you would rather it not travel with the file, strip it in another app before attaching here.</p>
