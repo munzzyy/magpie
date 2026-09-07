@@ -21,9 +21,8 @@ jobs:
       - name: e2e in chromium
         run: |
           sudo apt-get update -q
-          sudo apt-get install -qy chromium-browser exiftool
+          sudo apt-get install -qy chromium-browser
           sudo ln -sf "$(command -v chromium-browser)" /usr/local/bin/chromium
-          node tools/gen-fixtures.mjs
           npm run e2e
 
   android:
