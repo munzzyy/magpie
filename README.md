@@ -1,5 +1,7 @@
 # Magpie
 
+[![release](https://img.shields.io/github/v/release/munzzyy/magpie)](https://github.com/munzzyy/magpie/releases/latest) [![ci](https://github.com/munzzyy/magpie/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/magpie/actions/workflows/ci.yml) [![license: MIT](https://img.shields.io/badge/license-MIT-17697a)](LICENSE)
+
 A journal that can prove itself.
 
 People document the disputes in their lives with a camera roll and a notes
@@ -19,6 +21,17 @@ a small python script. Anyone can run it, no Magpie required, and confirm
 the whole record is exactly as chained. And the head hash, one line, pins
 the entire journal: email it to yourself or anyone you trust, and from
 that moment you can prove the record existed in exactly this state.
+
+<p align="center">
+  <img src="docs/shots/export.png" width="70%" alt="The export screen: share and save buttons, and the head hash under the words Anchor the record">
+</p>
+
+## Get it
+
+Android: install [magpie.apk](https://github.com/munzzyy/magpie/releases/latest/download/magpie.apk)
+(the link always points at the current release, so Obtainium can track
+it). Web: serve `app/` from any static host; no build step, no server
+side.
 
 ## Check the claims
 

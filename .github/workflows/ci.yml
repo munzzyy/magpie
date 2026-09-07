@@ -12,6 +12,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: tools the suites cross-check against
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -qy exiftool poppler-utils
       - name: unit tests
         run: npm test
       - name: i18n catalog complete
@@ -20,7 +24,6 @@ jobs:
         run: bash tools/check-clean.sh
       - name: e2e in chromium
         run: |
-          sudo apt-get update -q
           sudo apt-get install -qy chromium-browser
           sudo ln -sf "$(command -v chromium-browser)" /usr/local/bin/chromium
           npm run e2e

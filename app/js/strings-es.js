@@ -94,6 +94,7 @@ export const es = {
   "Could not read the shared file.": "No se pudo leer el archivo compartido.",
   "Could not build the export.": "No se pudo generar la exportación.",
   "Unlock to attach the shared file.": "Desbloquea para adjuntar el archivo compartido.",
+  "Unlock to attach your photo.": "Desbloquea para adjuntar tu foto.",
   "Locked while you were away.": "Bloqueado mientras no estabas.",
   "Everything is deleted.": "Todo está borrado.",
   "The two passphrases do not match.": "Las dos frases no coinciden.",
