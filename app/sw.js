@@ -43,6 +43,10 @@ self.addEventListener("activate", (event) => {
       await Promise.all(
         names.filter((n) => n !== VERSION && n !== SHARE_CACHE).map((n) => caches.delete(n))
       );
+      // Stale parked evidence from a pickup that never happened dies here
+      // too, not just on the app's next boot.
+      const share = await caches.open(SHARE_CACHE);
+      for (const req of await share.keys()) await share.delete(req);
       await self.clients.claim();
     })()
   );
@@ -54,8 +58,10 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method === "POST" && url.pathname === "/share") {
     event.respondWith(
       (async () => {
+        // share_target exists only on engines that send Sec-Fetch-Site,
+        // so a missing header is refused too: no cross-site file planting.
         const site = event.request.headers.get("Sec-Fetch-Site");
-        if (site !== null && site !== "none" && site !== "same-origin") {
+        if (site !== "none" && site !== "same-origin") {
           return new Response("no", { status: 403 });
         }
         try {

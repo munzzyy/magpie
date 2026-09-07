@@ -24,16 +24,25 @@ export function canonical(entry) {
   return `{${parts.join(",")}}`;
 }
 
+// Truncation must land on a code-point boundary: a lone surrogate would
+// hash fine in JS but crash the python verifier the moment it re-encodes,
+// bricking every future export of an append-only journal.
+function clip(s, n) {
+  let out = String(s).slice(0, n);
+  if (/[\uD800-\uDBFF]$/.test(out)) out = out.slice(0, -1);
+  return out;
+}
+
 export function makeEntry({ seq, ts, type, title, note, file }) {
   return {
     v: 1,
     seq,
     ts,
     type,
-    title: String(title || "").slice(0, 200),
+    title: clip(title || "", 200),
     note: String(note || ""),
     file: file
-      ? { name: String(file.name).slice(0, 120), mime: String(file.mime || ""), size: file.size, sha256: file.sha256 }
+      ? { name: clip(file.name, 120), mime: String(file.mime || ""), size: file.size, sha256: file.sha256 }
       : null,
   };
 }

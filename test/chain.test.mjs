@@ -64,3 +64,12 @@ test("sha256Hex matches a known vector", async () => {
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
   );
 });
+
+test("empty entry store against a real head fails verification", async () => {
+  const e1 = entry(1);
+  const head = await entryHash(GENESIS, e1);
+  const res = await verifyChain([], [], head);
+  assert.equal(res.ok, false);
+  // A genuinely fresh vault still passes.
+  assert.equal((await verifyChain([], [], GENESIS)).ok, true);
+});

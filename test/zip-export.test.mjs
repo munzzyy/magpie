@@ -102,3 +102,29 @@ test("verify.py independently verifies a JS-built export, and catches tampering"
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("emoji split across the truncation boundary cannot brick the python verifier", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "magpie-astral-"));
+  try {
+    // 199 chars then an astral emoji: a naive slice(0,200) would keep only
+    // its high surrogate and crash python's .encode() forever after.
+    const entry = makeEntry({
+      seq: 1,
+      ts: "2026-09-06T12:00:01.000Z",
+      type: "note",
+      title: "x".repeat(199) + "\u{1F600}",
+      note: "boundary \u{1F988} test",
+      file: null,
+    });
+    assert.ok(!/[\uD800-\uDBFF]$/.test(entry.title), "no trailing lone surrogate");
+    const head = await entryHash(GENESIS, entry);
+    const out = JSON.parse(canonical(entry));
+    writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ format: "magpie-export", v: 1, genesis: GENESIS, head, count: 1 }));
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify([out]));
+    writeFileSync(path.join(dir, "verify.py"), VERIFY_PY);
+    const ok = execFileSync("python3", [path.join(dir, "verify.py")], { encoding: "utf8" });
+    assert.match(ok, /^OK: 1 entries verify/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

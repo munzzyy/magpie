@@ -82,9 +82,14 @@ function lockNow(message) {
   $("entry-note").textContent = "";
   $("entry-title").textContent = "";
   $("entry-img").removeAttribute("src");
+  $("entry-file").textContent = "";
+  $("entry-meta").textContent = "";
+  $("entry-hash").textContent = "";
   $("export-head").textContent = "";
   $("add-form").reset();
+  $("attach-name").textContent = "";
   $("attach-name").hidden = true;
+  $("sr-live").textContent = "";
   show("lock");
   if (message) toast(message);
 }
@@ -362,7 +367,11 @@ function wireEvents() {
       hiddenAt = Date.now();
       return;
     }
-    const limit = Number(localStorage.getItem("magpie-autolock") ?? "60") * 1000;
+    let limit = 60000;
+    try {
+      const v = Number(localStorage.getItem("magpie-autolock"));
+      if (Number.isFinite(v)) limit = v * 1000;
+    } catch {}
     if (!vault.isLocked() && hiddenAt && Date.now() - hiddenAt >= limit) {
       lockNow(t("Locked while you were away."));
     }
@@ -421,12 +430,22 @@ async function boot() {
   wireEvents();
 
   onShared((tokens) => {
-    pendingShared.push(...tokens);
+    // Dedup defensively: an older wrapper may replay already-queued tokens.
+    for (const token of tokens) {
+      if (!pendingShared.includes(token)) pendingShared.push(token);
+    }
     if (!vault.isLocked()) nextSharedIntoAdd();
     else toast(t("Unlock to attach the shared file."));
   });
   onCaptured(async (token) => {
-    if (!token || vault.isLocked()) return;
+    if (!token) return;
+    // A capture that lands on a locked vault (aggressive autolock during
+    // the camera trip) queues like a share; losing the photo is worse.
+    if (vault.isLocked()) {
+      pendingShared.push(token);
+      toast(t("Unlock to attach your photo."));
+      return;
+    }
     try {
       const res = await fetch(`/shared/${token}`);
       const bytes = new Uint8Array(await res.arrayBuffer());

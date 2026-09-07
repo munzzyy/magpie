@@ -34,7 +34,10 @@ export async function verifyChain(entries, recordedHashes, recordedHead) {
     }
     prev = h;
   }
-  if (recordedHead && recordedHead !== prev && entries.length > 0) {
+  // No emptiness exemption: a wiped entry store against a surviving head
+  // must scream, not certify. A genuinely fresh vault has head === GENESIS
+  // and passes on its own.
+  if (recordedHead && recordedHead !== prev) {
     return { ok: false, head: prev, count: entries.length, badSeq: null };
   }
   return { ok: true, head: prev, count: entries.length, badSeq: null };

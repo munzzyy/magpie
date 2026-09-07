@@ -125,10 +125,35 @@ async function saveState() {
 }
 
 // Adds an entry (and its file bytes, if any) atomically with the chain
-// advance. The ts is the device clock, recorded as UTC; the threat model
-// is explicit that device time is claimable, not proven.
-export async function addEntry({ type, title, note, fileBytes, fileName, fileMime }) {
+// advance: record, file, and encrypted state land in ONE transaction, and
+// the in-memory chain only moves after it commits. add(), never put(), so
+// a sequence collision (a second unlocked tab, a stale state box after a
+// crash) throws instead of silently replacing committed evidence; on that
+// collision the state is re-read and the entry retried once at the real
+// head. The whole thing runs under a cross-tab lock where the platform
+// offers one.
+export async function addEntry(args) {
   guard();
+  const run = () => addEntryOnce(args);
+  if (navigator.locks?.request) {
+    return navigator.locks.request("magpie-vault-write", run);
+  }
+  return run();
+}
+
+async function reloadState() {
+  guard();
+  const state = await get("meta", "state");
+  if (state) {
+    const parsed = JSON.parse(await openText(key, state, "state"));
+    head = parsed.head;
+    count = parsed.count;
+  }
+}
+
+async function addEntryOnce({ type, title, note, fileBytes, fileName, fileMime }, retried = false) {
+  guard();
+  await reloadState();
   let file = null;
   if (fileBytes) {
     file = {
@@ -149,17 +174,39 @@ export async function addEntry({ type, title, note, fileBytes, fileName, fileMim
   const hash = await entryHash(head, entry);
   const entryBox = await seal(key, new TextEncoder().encode(canonical(entry)), `entry:${entry.seq}`);
   const fileBox = fileBytes ? await seal(key, fileBytes, `file:${entry.seq}`) : null;
+  const stateBox = await sealText(key, JSON.stringify({ head: hash, count: entry.seq }), "state");
   const d = await idb();
-  await new Promise((resolve, reject) => {
-    const t = d.transaction(["entries", "files", "meta"], "readwrite");
-    t.objectStore("entries").put({ box: entryBox, hash }, entry.seq);
-    if (fileBox) t.objectStore("files").put(fileBox, entry.seq);
-    t.oncomplete = resolve;
-    t.onerror = () => reject(t.error);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const t = d.transaction(["entries", "files", "meta"], "readwrite");
+      t.objectStore("entries").add({ box: entryBox, hash }, entry.seq);
+      if (fileBox) t.objectStore("files").put(fileBox, entry.seq);
+      t.objectStore("meta").put(stateBox, "state");
+      t.oncomplete = resolve;
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error);
+    });
+  } catch (err) {
+    if (!retried && err?.name === "ConstraintError") {
+      // Seq N already exists: another tab won the race, or a crash left a
+      // committed entry the state box never heard about. The store is the
+      // truth; walk forward to the real head and chain after it.
+      await reloadState();
+      let probe;
+      while ((probe = await get("entries", count + 1))) {
+        head = probe.hash;
+        count = count + 1;
+      }
+      const stateFix = await sealText(key, JSON.stringify({ head, count }), "state");
+      await tx("meta", "readwrite", (s) => {
+        s.put(stateFix, "state");
+      });
+      return addEntryOnce({ type, title, note, fileBytes, fileName, fileMime }, true);
+    }
+    throw err;
+  }
   head = hash;
   count = entry.seq;
-  await saveState();
   return { entry, hash };
 }
 
@@ -182,10 +229,21 @@ export async function getFile(seq) {
   return open(key, box, `file:${seq}`);
 }
 
-// Full chain recomputation against the stored records.
+// Full chain recomputation against the stored records. The stored row
+// count must equal the encrypted state's count, and every entry with file
+// metadata must still have its sealed attachment; a green badge over a
+// hollowed-out vault is the failure mode this exists to prevent.
 export async function verify() {
   guard();
   const rows = await listEntries();
+  if (rows.length !== count) {
+    return { ok: false, head, count: rows.length, badSeq: rows.length + 1 };
+  }
+  for (const { entry } of rows) {
+    if (entry.file && !(await get("files", entry.seq))) {
+      return { ok: false, head, count: rows.length, badSeq: entry.seq };
+    }
+  }
   return verifyChain(
     rows.map((r) => r.entry),
     rows.map((r) => r.hash),

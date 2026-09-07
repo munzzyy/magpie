@@ -116,9 +116,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (takeShared(intent)) {
+        val fresh = takeShared(intent)
+        if (fresh.isNotEmpty()) {
+            // Only the tokens THIS intent minted: replaying the whole queue
+            // would hand the page duplicates of one-shot tokens.
+            val json = fresh.joinToString(prefix = "[", postfix = "]", separator = ",") { "\"$it\"" }
             webView.evaluateJavascript(
-                "globalThis.__magpieShared && __magpieShared(${sharedTokensJson()})",
+                "globalThis.__magpieShared && __magpieShared($json)",
                 null,
             )
         }
@@ -143,7 +147,7 @@ class MainActivity : ComponentActivity() {
         return token
     }
 
-    private fun takeShared(intent: Intent?): Boolean {
+    private fun takeShared(intent: Intent?): List<String> {
         val uris: List<Uri> = when (intent?.action) {
             Intent.ACTION_SEND ->
                 listOfNotNull(
@@ -158,27 +162,31 @@ class MainActivity : ComponentActivity() {
             Intent.ACTION_VIEW -> listOfNotNull(intent.data)
             else -> emptyList()
         }
-        // content:// only, and never Magpie's own share-out provider paths.
-        val safe = uris.filter { it.scheme == "content" }
-        if (safe.isEmpty()) return false
-        for (uri in safe.take(50)) addShared(uri)
-        return true
+        // content:// only, and never Magpie's own provider: an outside
+        // sender must not make this process re-open its own shared_out or
+        // capture files (in-app captures go through startCapture, not here).
+        val safe = uris.filter { it.scheme == "content" && it.authority != AUTHORITY }
+        return safe.take(50).mapNotNull { addShared(it) }
     }
 
-    // One-shot: a successful serve removes the entry. The capture provider
-    // is our own authority, which is exactly the case where serving must
-    // still work, so only foreign shared_out-style paths are refused above.
+    // One-shot: a successful serve removes the entry, and a served capture
+    // file is read fully then deleted, so no plaintext photo outlives its
+    // hand-off into the encrypted journal.
     private fun serveShared(path: String): WebResourceResponse? {
         val idx = shared.indexOfFirst { it.first == path }
         if (idx == -1) return null
         val (_, uri) = shared[idx]
         return runCatching {
             val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-            val stream = contentResolver.openInputStream(uri)
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
             shared.removeAt(idx)
-            WebResourceResponse(mime, null, stream)
+            if (uri.authority == AUTHORITY) {
+                runCatching { File(cacheDir, "capture").deleteRecursively() }
+            }
+            WebResourceResponse(mime, null, bytes.inputStream())
         }.getOrNull()
     }
+
 
     override fun onDestroy() {
         shared.clear()
