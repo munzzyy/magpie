@@ -173,8 +173,30 @@ button { background: none; border: none; cursor: pointer; }
 .chain-badge.ok { background: var(--ok-bg); color: var(--ok); }
 .chain-badge.bad { background: var(--warn-bg); color: var(--warn); }
 
-.timeline { list-style: none; margin: 0; padding: 0; }
-.timeline li { margin-bottom: 10px; }
+/* The chain spine: a dashed line down the left edge of the timeline, with
+   one dot per entry, so the app looks like what it claims to be. */
+.timeline { list-style: none; margin: 0; padding: 0; position: relative; }
+.timeline li { position: relative; margin-bottom: 14px; padding-left: 28px; }
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: repeating-linear-gradient(to bottom, var(--accent) 0 6px, transparent 6px 11px);
+  opacity: 0.55;
+}
+.tl-dot {
+  position: absolute;
+  left: 0;
+  top: 16px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--accent);
+}
 .timeline button {
   display: block;
   width: 100%;
@@ -186,8 +208,45 @@ button { background: none; border: none; cursor: pointer; }
 }
 .timeline button:hover { border-color: var(--accent); }
 .tl-title { font-weight: 650; }
-.tl-meta { color: var(--ink-soft); font-size: 0.845rem; display: flex; gap: 10px; flex-wrap: wrap; }
-.empty { color: var(--ink-soft); text-align: center; padding: 30px 0; }
+.tl-meta { color: var(--ink-soft); font-size: 0.845rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.tl-hash {
+  font-size: 0.75rem;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--accent);
+}
+
+@keyframes chain-seal {
+  0% { transform: scale(0.92); opacity: 0; }
+  55% { transform: scale(1.015); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.tl-seal { animation: chain-seal 0.4s ease; }
+.tl-seal .tl-dot { animation: chain-seal 0.4s ease 0.05s both; }
+
+.empty { color: var(--ink-soft); text-align: center; padding: 40px 16px; }
+.empty-art { color: var(--line); margin-bottom: 8px; }
+.empty-title { font-weight: 650; color: var(--ink); margin: 0 0 6px; }
+.empty-sub { margin: 0 auto; max-width: 30em; font-size: 0.9rem; }
+
+/* Never display:none this: it is a role=status live region, and toggling
+   an empty live region to visible right when it gets its first text can
+   mean the announcement is missed. Staying in the flow costs nothing; it
+   has no border or background, so an empty line is visually inert. */
+.anchor-line { text-align: center; margin: 0 0 12px; min-height: 1.55em; }
+
+.search-row { margin: 4px 0 14px; }
+.search-row input {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  min-height: 44px;
+}
+
 .addbar { position: sticky; bottom: 14px; text-align: center; margin-top: 18px; }
 .addbar .btn-primary { box-shadow: var(--shadow); min-width: 200px; }
 
@@ -229,8 +288,27 @@ button { background: none; border: none; cursor: pointer; }
 }
 .toast.show { opacity: 1; visibility: visible; }
 
+.restore-block { padding: 4px 0; }
+.restore-block summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; padding: 0 20px; }
+.restore-block .form { padding: 0 20px 16px; }
+
+@keyframes lock-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+.shake { animation: lock-shake 0.4s; }
+
+@keyframes unlock-exhale {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+#screen-timeline:not([hidden]) { animation: unlock-exhale 0.35s ease; }
+
 @media (prefers-reduced-motion: reduce) {
   .toast { transition-duration: 0.01ms; }
+  .shake, .tl-seal, .tl-seal .tl-dot, #screen-timeline:not([hidden]) { animation: none; }
 }
 
 .doc-page main { max-width: 680px; margin: 0 auto; padding: 32px 20px; }

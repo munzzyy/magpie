@@ -112,4 +112,35 @@ export const es = {
     "Todavía no has exportado este diario. Guarda una copia en un lugar seguro.",
   "Exported today.": "Exportado hoy.",
   "{days} day(s) since your last export.": "{days} día(s) desde tu última exportación.",
+
+  "Restore from a sealed backup": "Restaurar desde una copia sellada",
+  "Backup file": "Archivo de copia",
+  "Restores only onto a device with no journal yet, and only after the whole chain re-verifies from the backup itself.":
+    "Solo restaura en un dispositivo sin diario todavía, y solo después de que toda la cadena se vuelva a verificar desde la propia copia.",
+  "Restore": "Restaurar",
+  "No entries match.": "Ninguna entrada coincide.",
+  "Every entry after it hashes back to this one. There is no entry zero, only whichever you write first.":
+    "Cada entrada posterior encadena su hash con esta. No existe la entrada cero, solo la que escribas primero.",
+  "Download a sealed backup": "Descargar una copia sellada",
+  "A sealed backup is your own ciphertext in one file: safe to park anywhere, useless to anyone without your passphrase. It restores only onto an empty device.":
+    "Una copia sellada es tu propio texto cifrado en un solo archivo: segura para guardar donde sea, inútil para cualquiera sin tu frase. Solo se restaura en un dispositivo vacío.",
+  "Search entries": "Buscar entradas",
+  "Search titles and notes": "Buscar en títulos y notas",
+
+  "Pinned through entry {n}.": "Fijado hasta la entrada {n}.",
+  "Pinned through entry {n}. {more} added since.": "Fijado hasta la entrada {n}. {more} añadida(s) desde entonces.",
+  "Not yet anchored. Export and share the head hash to pin the record.":
+    "Todavía sin fijar. Exporta y comparte la cabeza de la cadena para fijar el registro.",
+  "A journal already exists on this device. Delete it first, then restore.":
+    "Ya existe un diario en este dispositivo. Bórralo primero y luego restaura.",
+  "That file is not a Magpie sealed backup.": "Ese archivo no es una copia sellada de Magpie.",
+  "That passphrase does not open this backup.": "Esa frase no abre esta copia.",
+  "This backup is damaged and cannot be restored.": "Esta copia está dañada y no se puede restaurar.",
+  "This backup's chain does not verify. It may be tampered with, so it was refused.":
+    "La cadena de esta copia no verifica. Puede haber sido manipulada, así que se rechazó.",
+  "Could not restore this backup.": "No se pudo restaurar esta copia.",
+  "Restored: {count} entry(ies).": "Restaurado: {count} entrada(s).",
+  "Sealed backup downloaded. It is safe to park anywhere; only your passphrase opens it.":
+    "Copia sellada descargada. Es segura para guardar donde sea; solo tu frase la abre.",
+  "Choose where to save your sealed backup.": "Elige dónde guardar tu copia sellada.",
 };
