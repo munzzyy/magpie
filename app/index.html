@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Magpie: a journal that can prove itself</title>
+<meta name="description" content="A tamper-evident incident journal. Photos, notes, and files, encrypted on your device and hash-chained so nobody can quietly rewrite the record, you included.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#eef2f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101413" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main" data-i18n>Skip to content</a>
+
+<main id="main">
+
+<!-- ============================================================ setup -->
+<section id="screen-setup" class="screen" hidden>
+  <div class="hero">
+    <img class="logo" src="icons/magpie.svg" alt="" width="72" height="72">
+    <h1>Magpie</h1>
+    <p class="tagline" data-i18n>A journal that can prove itself.</p>
+    <p class="pitch" data-i18n>For the disputes life actually throws at people: the landlord who never fixed it, the messages that keep coming, the package that arrived broken. Magpie keeps photos, notes, and files encrypted on your device, and chains every entry to the last so the record cannot be quietly rewritten later. By anyone. You included, and that is the point.</p>
+
+    <form id="setup-form" class="card form">
+      <h2 data-i18n>Create your journal</h2>
+      <label data-i18n for="setup-pass">Passphrase</label>
+      <input id="setup-pass" type="password" autocomplete="new-password" minlength="8" required>
+      <label data-i18n for="setup-pass2">Same passphrase again</label>
+      <input id="setup-pass2" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="warn-line" data-i18n>There is no reset and no recovery. If this passphrase is lost, the journal is gone. Four random words you can remember beat clever symbols you cannot.</p>
+      <button class="btn-primary" type="submit" data-testid="setup-create" data-i18n>Create</button>
+    </form>
+  </div>
+
+  <div class="web-only landing">
+    <section class="lnd">
+      <h2 data-i18n>Why a journal needs a chain</h2>
+      <p data-i18n>A folder of screenshots proves almost nothing: files re-save, dates change, entries vanish. Magpie hashes every entry together with the one before it. Change anything, anywhere, and the final hash stops matching. Share that one hash early, with a friend, a lawyer, or your own email, and you can later prove the whole record existed exactly as it is now.</p>
+    </section>
+    <section class="lnd">
+      <h2 data-i18n>What it does</h2>
+      <div class="lnd-cards">
+        <article class="lnd-card"><h3 data-i18n>Everything encrypted</h3><p data-i18n>Entries and attachments are sealed with your passphrase on your device. Locked means unreadable, including to this app.</p></article>
+        <article class="lnd-card"><h3 data-i18n>Exports that prove themselves</h3><p data-i18n>One zip: your files, the chain manifest, and a small python script anyone can run to verify the whole record without trusting Magpie.</p></article>
+        <article class="lnd-card"><h3 data-i18n>Nothing leaves your device</h3><p data-i18n>No accounts, no cloud, no analytics. The Android app has no internet permission at all, which you can check in the manifest.</p></article>
+      </div>
+    </section>
+    <section class="lnd">
+      <h2 data-i18n>What it is not</h2>
+      <ul class="honest-list">
+        <li data-i18n>Not a promise of court admissibility. The chain makes tampering evident; what a court accepts depends on much more. Talk to a lawyer for legal disputes.</li>
+        <li data-i18n>Not proof of time by itself. Timestamps come from your device clock. Sharing the chain head early is what pins the record to a moment.</li>
+        <li data-i18n>Not cloud backup. The journal lives only on this device; export regularly and keep copies somewhere safe. Uninstalling deletes everything.</li>
+        <li data-i18n>Not for hostile-device situations. If someone controls your phone or knows your passphrase, no app protects the record.</li>
+      </ul>
+    </section>
+    <section class="lnd" id="landing-app">
+      <h2 data-i18n>The Android app cannot phone home</h2>
+      <p data-i18n>Magpie for Android requests no permissions. Photos come in through the system camera, and the operating system will not let the app open a network connection, ever.</p>
+      <p class="apk-row"><a class="btn-primary" href="https://github.com/munzzyy/magpie/releases/latest/download/magpie.apk" data-i18n>Download the APK</a></p>
+    </section>
+    <footer class="land-footer">
+      <a href="privacy.html" data-i18n>Privacy</a>
+      <a href="https://github.com/munzzyy/magpie">GitHub</a>
+      <span id="ver"></span>
+    </footer>
+  </div>
+  <p class="locale-line"><label><span class="sr-only" data-i18n>Language</span><select id="locale-pick"></select></label></p>
+</section>
+
+<!-- ============================================================= lock -->
+<section id="screen-lock" class="screen" hidden>
+  <div class="hero">
+    <img class="logo" src="icons/magpie.svg" alt="" width="72" height="72">
+    <h1>Magpie</h1>
+    <form id="lock-form" class="card form">
+      <label data-i18n for="lock-pass">Passphrase</label>
+      <input id="lock-pass" type="password" autocomplete="current-password" required>
+      <p id="lock-error" class="warn-line" hidden data-i18n>That passphrase does not open this journal.</p>
+      <button class="btn-primary" type="submit" data-testid="unlock" data-i18n>Unlock</button>
+    </form>
+  </div>
+</section>
+
+<!-- ========================================================= timeline -->
+<section id="screen-timeline" class="screen" hidden>
+  <header class="topbar">
+    <strong>Magpie</strong>
+    <span id="chain-badge" class="chain-badge" role="status"></span>
+    <span class="top-space"></span>
+    <button id="btn-verify" class="btn-ghost" data-testid="verify" data-i18n>Verify</button>
+    <button id="btn-export" class="btn-ghost" data-testid="export" data-i18n>Export</button>
+    <button id="btn-lock" class="icon-btn" data-i18n-attr="aria-label" aria-label="Lock now" title="Lock">🔒</button>
+  </header>
+
+  <ul id="timeline" class="timeline"></ul>
+  <p id="timeline-empty" class="empty" hidden data-i18n>Nothing here yet. The first entry starts the chain.</p>
+
+  <div class="addbar">
+    <button id="btn-add" class="btn-primary" data-testid="add" data-i18n>Add entry</button>
+  </div>
+
+  <details class="danger">
+    <summary data-i18n>Settings and danger zone</summary>
+    <div class="danger-body">
+      <label data-i18n for="autolock">Lock when hidden for</label>
+      <select id="autolock">
+        <option value="0" data-i18n>Immediately</option>
+        <option value="60" selected data-i18n>1 minute</option>
+        <option value="300" data-i18n>5 minutes</option>
+      </select>
+      <p class="warn-line" data-i18n>Delete everything: type DELETE below and press the button. There is no undo and no copy anywhere else.</p>
+      <input id="wipe-confirm" type="text" autocomplete="off">
+      <button id="btn-wipe" class="btn-danger" disabled data-i18n>Delete the whole journal</button>
+    </div>
+  </details>
+</section>
+
+<!-- ============================================================== add -->
+<section id="screen-add" class="screen" hidden>
+  <header class="topbar">
+    <button id="btn-add-cancel" class="icon-btn" data-i18n-attr="aria-label" aria-label="Cancel">✕</button>
+    <strong data-i18n>New entry</strong>
+  </header>
+  <form id="add-form" class="form add-form">
+    <label data-i18n for="add-title">What happened, in a few words</label>
+    <input id="add-title" type="text" maxlength="200" required>
+    <label data-i18n for="add-note">Details</label>
+    <textarea id="add-note" rows="6"></textarea>
+    <div class="attach-row">
+      <button type="button" id="btn-attach" class="btn-ghost" data-i18n>Attach a file</button>
+      <button type="button" id="btn-camera" class="btn-ghost" hidden data-i18n>Take a photo</button>
+      <input id="attach-input" type="file" hidden>
+    </div>
+    <p id="attach-name" class="attach-name" hidden></p>
+    <p class="warn-line" data-i18n>Entries cannot be edited or deleted once chained. Get it right, or add a follow-up entry that corrects it.</p>
+    <button class="btn-primary" type="submit" data-testid="save-entry" data-i18n>Chain this entry</button>
+  </form>
+</section>
+
+<!-- ============================================================ entry -->
+<section id="screen-entry" class="screen" hidden>
+  <header class="topbar">
+    <button id="btn-entry-back" class="icon-btn" data-i18n-attr="aria-label" aria-label="Back">←</button>
+    <strong id="entry-title"></strong>
+  </header>
+  <div class="entry-body">
+    <p id="entry-meta" class="entry-meta"></p>
+    <p id="entry-note" class="entry-note"></p>
+    <img id="entry-img" class="entry-img" hidden alt="">
+    <p id="entry-file" class="attach-name" hidden></p>
+    <p class="hash-line"><span data-i18n>Entry hash</span>: <code id="entry-hash"></code></p>
+  </div>
+</section>
+
+<!-- =========================================================== export -->
+<section id="screen-export" class="screen" hidden>
+  <header class="topbar">
+    <button id="btn-export-back" class="icon-btn" data-i18n-attr="aria-label" aria-label="Back">←</button>
+    <strong data-i18n>Export</strong>
+  </header>
+  <div class="entry-body">
+    <p data-i18n>The export is a plain zip: your entries, your files, and a small script that lets anyone verify the chain without Magpie.</p>
+    <div class="done-actions">
+      <button id="btn-export-share" class="btn-primary" data-testid="share-export" data-i18n>Share</button>
+      <button id="btn-export-save" class="btn-primary" data-i18n>Save</button>
+    </div>
+    <div class="card">
+      <h2 data-i18n>Anchor the record</h2>
+      <p data-i18n>This is the head hash: the fingerprint of the whole journal as it stands. The moment it leaves your hands, the record is pinned. Email it to yourself, text it to someone you trust, or post it anywhere with a date.</p>
+      <p class="hash-line"><code id="export-head"></code></p>
+      <button id="btn-copy-head" class="btn-ghost" data-i18n>Copy head hash</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<div id="toast" class="toast" aria-hidden="true"></div>
+<div id="sr-live" class="sr-only" aria-live="polite"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

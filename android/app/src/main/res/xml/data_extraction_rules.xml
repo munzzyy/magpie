@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing leaves the device in a backup either: no cloud backup, no
+     device-to-device transfer. The app keeps no data worth migrating and a
+     backup is one more copy of something that was supposed to be private. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

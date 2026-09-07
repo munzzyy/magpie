@@ -1,0 +1,1 @@
+First release: encrypted hash-chained journal, self-verifying zip exports, share-in, system-camera capture, EN+ES, zero permissions.

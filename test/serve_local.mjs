@@ -27,7 +27,7 @@ createServer(async (req, res) => {
     if (file === "/") file = "/index.html";
     // Test stand-in for the wrapper's share hand-off origin path.
     if (file.startsWith("/shared/")) {
-      const body = await readFile(path.join(ROOT, "..", "test", "fixtures", "real-gps.jpg"));
+      const body = Buffer.alloc(2048, "shared-evidence-bytes ");
       res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
       res.end(body);
       return;

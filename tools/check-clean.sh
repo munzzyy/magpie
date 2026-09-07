@@ -48,7 +48,7 @@ fi
 ver=$(grep -oE '"version": "[^"]+"' package.json | cut -d'"' -f4)
 bad=0
 grep -q "VERSION = \"$ver\"" app/js/main.js || { echo "app/js/main.js VERSION != $ver"; bad=1; }
-grep -q "VERSION = \"sepia-v$ver\"" app/sw.js || { echo "app/sw.js VERSION != sepia-v$ver"; bad=1; }
+grep -q "VERSION = \"magpie-v$ver\"" app/sw.js || { echo "app/sw.js VERSION != magpie-v$ver"; bad=1; }
 grep -q "versionName = \"$ver\"" android/app/build.gradle.kts || { echo "gradle versionName != $ver"; bad=1; }
 grep -q "^## $ver" CHANGELOG.md || { echo "CHANGELOG.md missing ## $ver"; bad=1; }
 if [ "$bad" -eq 1 ]; then exit 1; fi

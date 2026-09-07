@@ -1,0 +1,1 @@
+Un diario de incidentes a prueba de manipulacion. Cifrado, encadenado por hashes, con exportaciones que se prueban solas.

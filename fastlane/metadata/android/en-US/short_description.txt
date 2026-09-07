@@ -1,0 +1,1 @@
+A tamper-evident incident journal. Encrypted, hash-chained, exports that prove themselves.

@@ -1,0 +1,14 @@
+/magpie.apk
+  Content-Type: application/vnd.android.package-archive
+  Content-Disposition: attachment; filename="magpie.apk"
+  Cache-Control: no-cache
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), usb=(), bluetooth=(), payment=(), midi=(), serial=(), hid=(), accelerometer=(), gyroscope=(), magnetometer=(), interest-cohort=()
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'

@@ -1,0 +1,21 @@
+People document disputes with a camera roll and a notes app, and months
+later it proves nothing: files re-save, dates shift, entries vanish.
+
+Magpie is an incident journal with receipts:
+
+* Every entry (photo, note, file) is hash-chained to the one before it.
+  Edit, reorder, or delete anything and the chain breaks visibly.
+* Everything is encrypted on your device with your passphrase. Locked
+  means unreadable, including to the app.
+* Exports are plain zips carrying your files, the chain manifest, and a
+  small python script anyone can run to verify the record without Magpie.
+* Share the one-line head hash early (email it to yourself, send it to
+  someone you trust) and the whole record is pinned to that moment.
+
+This app requests no permissions. Photos come through the system camera,
+and the operating system refuses every network connection. No accounts,
+no analytics, no dependencies. MIT licensed.
+
+Honest limits: tamper-evident is not court-admissible by itself, device
+timestamps are claims until anchored, and there is no passphrase
+recovery on purpose.

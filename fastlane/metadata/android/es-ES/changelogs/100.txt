@@ -1,0 +1,1 @@
+Primera version: diario cifrado con cadena de hashes, exportaciones zip autoverificables, captura con la camara del sistema, EN+ES, cero permisos.
