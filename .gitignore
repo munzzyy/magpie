@@ -7,3 +7,4 @@ android/local.properties
 test/screenshots/
 test/__pycache__/
 tools/__pycache__/
+test/fixtures/

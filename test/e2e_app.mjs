@@ -161,7 +161,10 @@ async function main() {
     check("chain badge shows intact after entry 1", /chain intact/.test(await c.evalJs("document.getElementById('chain-badge').textContent")));
 
     // ------------------------------------- second entry with attachment
-    const canaryFile = path.join(work, "evidence.bin");
+    // Written under the repo tree: CI runners' chromium cannot always read
+    // files living in another process's temp directory.
+    mkdirSync(path.join(ROOT, "test", "fixtures"), { recursive: true });
+    const canaryFile = path.join(ROOT, "test", "fixtures", "evidence.bin");
     writeFileSync(canaryFile, `${CANARY_BYTES} repeated ${CANARY_BYTES}`);
     await c.evalJs("document.getElementById('btn-add').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add'"), "add screen 2");
