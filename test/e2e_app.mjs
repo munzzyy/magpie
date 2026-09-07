@@ -208,8 +208,9 @@ async function main() {
     await c.evalJs("document.getElementById('btn-export-back').click(); 'ok'");
     await c.evalJs("document.getElementById('btn-lock').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'lock'"), "locked");
-    const lockedDom = await c.evalJs("document.getElementById('timeline').innerHTML + document.getElementById('entry-note').textContent + (document.getElementById('entry-img').getAttribute('src') || '')");
-    check("locked: no journal content left in the DOM", !lockedDom.includes("CANARY") && !lockedDom.includes("Broken window"), lockedDom.slice(0, 80));
+    const lockedDom = await c.evalJs(`["timeline", "entry-note", "entry-title", "entry-meta", "entry-file", "entry-hash", "attach-name", "export-head", "sr-live"]
+      .map((id) => document.getElementById(id).textContent).join("|") + (document.getElementById("entry-img").getAttribute("src") || "")`);
+    check("locked: no journal content left anywhere in the DOM", !lockedDom.includes("CANARY") && !lockedDom.includes("Broken window") && !lockedDom.includes("evidence.bin"), lockedDom.slice(0, 100));
 
     const idbDump = await c.evalJs(DUMP_IDB, true);
     check("at rest: title never stored in plaintext", !idbDump.includes(CANARY_TITLE));
