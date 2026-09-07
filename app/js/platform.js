@@ -1,11 +1,13 @@
-// The seam between the page and the Android wrapper. Same contract as the
-// sibling apps: bytes out through the bridge, shared-in content streamed
-// over one-shot asset-origin tokens, and no network anywhere because the
-// APK has no permission to open one.
+// The seam between the page and the wrappers. Same contract as the sibling
+// apps: bytes out through a bridge, shared-in content streamed over
+// one-shot asset-origin tokens, and no network anywhere because neither
+// wrapper has a permission or a networking code path to open one.
+
+import { isWrapper, isIOSWrapped, iosSaveBridge } from "./env.js";
 
 const native = () => globalThis.MagpieNative;
 
-export const isWrapper = () => !!native();
+export { isWrapper };
 
 export const wrapperVersion = () => {
   try {
@@ -24,11 +26,36 @@ function toBase64(bytes) {
   return btoa(bin);
 }
 
+// Thrown when the page is running on the magpie: scheme (a real iOS
+// wrapper build) but the "save" message handler is missing: a stale build
+// that shipped without the bridge, or one built from a tree where it broke.
+// Callers must surface this as a loud failure. It is never a silent no-op
+// and never a fake success toast.
+export class ExportUnavailableError extends Error {
+  constructor() {
+    super("export cannot leave the app in this build");
+  }
+}
+
+async function postToIOS(bridge, blob, name) {
+  bridge.postMessage({
+    name,
+    mime: blob.type || "application/octet-stream",
+    b64: toBase64(new Uint8Array(await blob.arrayBuffer())),
+  });
+}
+
 export async function shareOut(blob, name) {
   if (native()) {
     native().shareFile(toBase64(new Uint8Array(await blob.arrayBuffer())), blob.type, name);
     return true;
   }
+  const bridge = iosSaveBridge();
+  if (bridge) {
+    await postToIOS(bridge, blob, name);
+    return true;
+  }
+  if (isIOSWrapped()) return false;
   if (navigator.canShare) {
     const file = new File([blob], name, { type: blob.type });
     if (navigator.canShare({ files: [file] })) {
@@ -48,6 +75,12 @@ export async function saveOut(blob, name) {
     native().saveFile(toBase64(new Uint8Array(await blob.arrayBuffer())), blob.type, name);
     return "native";
   }
+  const bridge = iosSaveBridge();
+  if (bridge) {
+    await postToIOS(bridge, blob, name);
+    return "ios-share";
+  }
+  if (isIOSWrapped()) throw new ExportUnavailableError();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

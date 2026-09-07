@@ -4,7 +4,8 @@
 
 import * as vault from "./vault.js";
 import { buildExport } from "./export.js";
-import { isWrapper, wrapperVersion, shareOut, saveOut, canCapture, capturePhoto, onCaptured, sharedTokens, onShared } from "./platform.js";
+import { isWrapper, wrapperVersion, shareOut, saveOut, canCapture, capturePhoto, onCaptured, sharedTokens, onShared, ExportUnavailableError } from "./platform.js";
+import { isBundled } from "./env.js";
 import { setLocale, resolveLocale, translateDom, t, LOCALE_CHOICES } from "./i18n.js";
 
 const VERSION = "0.1.0";
@@ -66,6 +67,8 @@ function show(name) {
   if (name === "lock") $("lock-pass").focus({ preventScroll: true });
   else if (name === "add") $("add-title").focus({ preventScroll: true });
   else if (name === "timeline") $("btn-add").focus({ preventScroll: true });
+  else if (name === "entry") $("entry-title").focus({ preventScroll: true });
+  else if (name === "export") $("export-title").focus({ preventScroll: true });
 }
 
 function releaseEntryUrls() {
@@ -86,6 +89,8 @@ function lockNow(message) {
   $("entry-meta").textContent = "";
   $("entry-hash").textContent = "";
   $("export-head").textContent = "";
+  const reminder = $("export-reminder");
+  if (reminder) reminder.textContent = "";
   $("add-form").reset();
   $("attach-name").textContent = "";
   $("attach-name").hidden = true;
@@ -120,6 +125,7 @@ async function renderTimeline() {
     list.append(li);
   }
   await refreshBadge(rows.length);
+  updateExportReminder();
 }
 
 async function refreshBadge(count) {
@@ -174,6 +180,7 @@ function setPendingAttach(bytes, name, mime) {
     kb: Math.max(1, Math.round(bytes.length / 1024)),
   });
   line.hidden = false;
+  announce(line.textContent);
 }
 
 async function saveEntry(ev) {
@@ -253,6 +260,59 @@ async function openExport() {
   }
 }
 
+// Export nudge: a plain, non-nagging line in Settings, never a popup. It
+// only reads what shareOut/saveOut already reported succeeding; there is no
+// way to know a share sheet's own outcome, so "exported" means "handed to
+// the platform", the same honesty the toast copy carries.
+function markExported() {
+  try {
+    localStorage.setItem("magpie-last-export", String(Date.now()));
+  } catch {}
+  updateExportReminder();
+}
+
+function updateExportReminder() {
+  const line = $("export-reminder");
+  if (!line) return;
+  let count = 0;
+  try {
+    count = vault.headState().count;
+  } catch {
+    line.textContent = "";
+    return;
+  }
+  if (!count) {
+    line.textContent = "";
+    return;
+  }
+  let last = null;
+  try {
+    const raw = localStorage.getItem("magpie-last-export");
+    if (raw) last = Number(raw);
+  } catch {}
+  if (!last || !Number.isFinite(last)) {
+    line.textContent = t("You have not exported this journal yet. Keep a copy somewhere safe.");
+    return;
+  }
+  const days = Math.floor((Date.now() - last) / 86400000);
+  line.textContent =
+    days <= 0
+      ? t("Exported today.")
+      : t("{days} day(s) since your last export.", { days });
+}
+
+// The bridge exists but declined (a stale wrapper build) or something in
+// the hand-off itself failed. Either way the user must be told plainly;
+// never a silent no-op, never a fake success toast.
+function reportExportFailure(err) {
+  toast(
+    err instanceof ExportUnavailableError
+      ? t("This build of Magpie cannot get the export out of the app. Update it and try again.")
+      : t("Could not hand off the export."),
+    6000,
+  );
+}
+
 const exportName = () => {
   const raw = crypto.getRandomValues(new Uint8Array(4));
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
@@ -285,7 +345,11 @@ function wireEvents() {
     const ok = await vault.unlock($("lock-pass").value);
     $("lock-pass").value = "";
     $("lock-error").hidden = ok;
-    if (!ok) return;
+    if (!ok) {
+      announce(t("That passphrase does not open this journal."));
+      $("lock-pass").focus({ preventScroll: true });
+      return;
+    }
     await renderTimeline();
     show("timeline");
     if (pendingShared.length) await nextSharedIntoAdd();
@@ -329,16 +393,36 @@ function wireEvents() {
   $("btn-export-back").addEventListener("click", () => show("timeline"));
   $("btn-export-share").addEventListener("click", async () => {
     if (!exportBlob) return;
-    const ok = await shareOut(exportBlob, exportName());
-    if (!ok) {
-      await saveOut(exportBlob, exportName());
-      toast(t("Sharing is not available here, so it downloaded instead."));
+    try {
+      const ok = await shareOut(exportBlob, exportName());
+      if (ok) {
+        markExported();
+        toast(t("Choose where to send it."));
+        return;
+      }
+      const how = await saveOut(exportBlob, exportName());
+      markExported();
+      toast(
+        how === "download"
+          ? t("Sharing is not available here, so it downloaded instead.")
+          : t("Choose where to save it."),
+      );
+    } catch (err) {
+      __magpieErrors.push(`export-share: ${err}`);
+      reportExportFailure(err);
     }
   });
   $("btn-export-save").addEventListener("click", async () => {
     if (!exportBlob) return;
-    const how = await saveOut(exportBlob, exportName());
-    if (how === "download") toast(t("Downloaded"));
+    try {
+      const how = await saveOut(exportBlob, exportName());
+      markExported();
+      if (how === "download") toast(t("Downloaded"));
+      else if (how === "ios-share") toast(t("Choose where to save it."));
+    } catch (err) {
+      __magpieErrors.push(`export-save: ${err}`);
+      reportExportFailure(err);
+    }
   });
   $("btn-copy-head").addEventListener("click", () => {
     const head = $("export-head").textContent;
@@ -418,9 +502,13 @@ async function boot() {
   translateDom();
   buildLocalePicker();
 
-  if (isWrapper()) {
+  // "Bundled" (Android bridge or the iOS scheme) strips the marketing
+  // landing and browser-install copy: neither is a browser tab. Camera
+  // capture stays gated on isWrapper() alone, since only Android's bridge
+  // can hand the page a photo back from the system camera app.
+  if (isBundled()) {
     for (const node of document.querySelectorAll(".web-only")) node.remove();
-    $("btn-camera").hidden = !canCapture();
+    $("btn-camera").hidden = !(isWrapper() && canCapture());
   } else if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
@@ -458,8 +546,9 @@ async function boot() {
   pendingShared.push(...sharedTokens());
 
   // Web share-target: the worker parked files for one pickup; every boot
-  // purges the parking lot either way.
-  if ("caches" in globalThis && !isWrapper()) {
+  // purges the parking lot either way. Neither wrapper ever registers the
+  // service worker that fills this cache, so bundled builds skip it.
+  if ("caches" in globalThis && !isBundled()) {
     try {
       const cache = await caches.open("magpie-share");
       const isPickup = new URLSearchParams(location.search).has("share-target");

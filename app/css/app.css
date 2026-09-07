@@ -38,17 +38,22 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+html {
+  /* Leaves the root size at the browser/OS default so rem below tracks a
+     visitor's own text-size preference instead of overriding it. */
+  font-size: 100%;
+}
 html, body {
   margin: 0;
   padding: 0;
   background: var(--paper);
   color: var(--ink);
-  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 1rem/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   min-height: 100%;
 }
 
 img { max-width: 100%; }
-code { overflow-wrap: anywhere; font-size: 13px; }
+code { overflow-wrap: anywhere; font-size: 0.8125rem; }
 
 .sr-only {
   position: absolute;
@@ -105,14 +110,14 @@ button { background: none; border: none; cursor: pointer; }
   font-weight: 650;
 }
 .btn-danger[disabled] { opacity: 0.4; cursor: default; }
-.icon-btn { min-width: 44px; min-height: 44px; border-radius: 12px; font-size: 19px; color: var(--ink-soft); }
+.icon-btn { min-width: 44px; min-height: 44px; border-radius: 12px; font-size: 1.1875rem; color: var(--ink-soft); }
 .icon-btn:hover { background: var(--paper-2); color: var(--ink); }
 
 .screen { max-width: 760px; margin: 0 auto; padding: 18px 18px 60px; }
 .hero { text-align: center; padding-top: 22px; }
 .hero .logo { display: block; margin: 0 auto 6px; }
-.hero h1 { margin: 0; font-size: 40px; }
-.tagline { margin: 2px 0 14px; font-size: 19px; font-weight: 600; color: var(--accent); }
+.hero h1 { margin: 0; font-size: 2.5rem; }
+.tagline { margin: 2px 0 14px; font-size: 1.1875rem; font-weight: 600; color: var(--accent); }
 .pitch { max-width: 36em; margin: 0 auto 24px; color: var(--ink-soft); text-align: left; }
 
 .card {
@@ -124,7 +129,7 @@ button { background: none; border: none; cursor: pointer; }
   max-width: 460px;
   text-align: left;
 }
-.card h2 { margin: 0 0 10px; font-size: 19px; }
+.card h2 { margin: 0 0 10px; font-size: 1.1875rem; }
 .form label { display: block; font-weight: 600; margin: 12px 0 4px; }
 .form input[type="password"], .form input[type="text"], .form textarea, .danger-body input {
   width: 100%;
@@ -136,20 +141,21 @@ button { background: none; border: none; cursor: pointer; }
 }
 .form textarea { resize: vertical; }
 .form .btn-primary { margin-top: 16px; width: 100%; }
-.warn-line { color: var(--warn); font-size: 14px; }
+.warn-line { color: var(--warn); font-size: 0.875rem; }
+.hint-line { color: var(--ink-soft); font-size: 0.875rem; }
 
 .landing { margin-top: 52px; }
 .lnd { margin-bottom: 40px; }
-.lnd h2 { font-size: 24px; }
+.lnd h2 { font-size: 1.5rem; }
 .lnd p { color: var(--ink-soft); }
 .lnd-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
 .lnd-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
-.lnd-card h3 { margin: 0 0 6px; font-size: 16.5px; }
-.lnd-card p { margin: 0; font-size: 14.5px; }
+.lnd-card h3 { margin: 0 0 6px; font-size: 1.03rem; }
+.lnd-card p { margin: 0; font-size: 0.9rem; }
 .honest-list { padding-left: 20px; color: var(--ink-soft); }
 .honest-list li { margin-bottom: 10px; }
 .apk-row { margin: 14px 0 4px; }
-.land-footer { display: flex; gap: 18px; padding: 16px 0 4px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 14px; }
+.land-footer { display: flex; gap: 18px; padding: 16px 0 4px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 0.875rem; }
 .land-footer a { color: var(--accent); }
 .locale-line { text-align: center; margin-top: 24px; }
 .locale-line select {
@@ -161,9 +167,9 @@ button { background: none; border: none; cursor: pointer; }
 }
 
 .topbar { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
-.topbar strong { font-size: 18px; }
+.topbar h1 { margin: 0; font-size: 1.125rem; font-weight: 700; }
 .top-space { flex: 1; }
-.chain-badge { font-size: 13px; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
+.chain-badge { font-size: 0.8125rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
 .chain-badge.ok { background: var(--ok-bg); color: var(--ok); }
 .chain-badge.bad { background: var(--warn-bg); color: var(--warn); }
 
@@ -180,25 +186,26 @@ button { background: none; border: none; cursor: pointer; }
 }
 .timeline button:hover { border-color: var(--accent); }
 .tl-title { font-weight: 650; }
-.tl-meta { color: var(--ink-soft); font-size: 13.5px; display: flex; gap: 10px; flex-wrap: wrap; }
+.tl-meta { color: var(--ink-soft); font-size: 0.845rem; display: flex; gap: 10px; flex-wrap: wrap; }
 .empty { color: var(--ink-soft); text-align: center; padding: 30px 0; }
 .addbar { position: sticky; bottom: 14px; text-align: center; margin-top: 18px; }
 .addbar .btn-primary { box-shadow: var(--shadow); min-width: 200px; }
 
 .danger { margin-top: 34px; color: var(--ink-soft); }
-.danger summary { cursor: pointer; min-height: 30px; font-weight: 600; }
+.danger summary { cursor: pointer; display: flex; align-items: center; min-height: 44px; font-weight: 600; }
 .danger-body { padding: 10px 0; display: grid; gap: 10px; max-width: 420px; }
 .danger-body select { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 44px; }
+.danger-body label { font-weight: 600; margin: 0; }
 
 .add-form { max-width: 560px; margin: 0 auto; }
 .attach-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-.attach-name { color: var(--ink-soft); font-size: 14px; }
+.attach-name { color: var(--ink-soft); font-size: 0.875rem; }
 
 .entry-body { max-width: 620px; margin: 0 auto; }
-.entry-meta { color: var(--ink-soft); font-size: 14px; }
+.entry-meta { color: var(--ink-soft); font-size: 0.875rem; }
 .entry-note { white-space: pre-wrap; }
 .entry-img { border-radius: var(--radius); border: 1px solid var(--line); }
-.hash-line { color: var(--ink-soft); font-size: 13.5px; }
+.hash-line { color: var(--ink-soft); font-size: 0.845rem; }
 
 .done-actions { display: flex; gap: 12px; margin: 16px 0; }
 .done-actions .btn-primary { min-width: 130px; }
@@ -212,7 +219,7 @@ button { background: none; border: none; cursor: pointer; }
   color: var(--paper);
   border-radius: var(--radius);
   padding: 10px 18px;
-  font-size: 14.5px;
+  font-size: 0.9rem;
   box-shadow: var(--shadow);
   z-index: 50;
   max-width: min(92vw, 480px);
@@ -221,5 +228,9 @@ button { background: none; border: none; cursor: pointer; }
   transition: opacity 0.15s;
 }
 .toast.show { opacity: 1; visibility: visible; }
+
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition-duration: 0.01ms; }
+}
 
 .doc-page main { max-width: 680px; margin: 0 auto; padding: 32px 20px; }

@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#eef2f0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#101413" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="css/app.css">
 </head>
@@ -31,10 +31,10 @@
     <form id="setup-form" class="card form">
       <h2 data-i18n>Create your journal</h2>
       <label data-i18n for="setup-pass">Passphrase</label>
-      <input id="setup-pass" type="password" autocomplete="new-password" minlength="8" required>
+      <input id="setup-pass" type="password" autocomplete="new-password" minlength="8" required aria-describedby="setup-pass-rule">
       <label data-i18n for="setup-pass2">Same passphrase again</label>
       <input id="setup-pass2" type="password" autocomplete="new-password" minlength="8" required>
-      <p class="warn-line" data-i18n>There is no reset and no recovery. If this passphrase is lost, the journal is gone. Four random words you can remember beat clever symbols you cannot.</p>
+      <p id="setup-pass-rule" class="warn-line" data-i18n>At least 8 characters. There is no reset and no recovery. If this passphrase is lost, the journal is gone. Four random words you can remember beat clever symbols you cannot.</p>
       <button class="btn-primary" type="submit" data-testid="setup-create" data-i18n>Create</button>
     </form>
   </div>
@@ -48,7 +48,7 @@
       <h2 data-i18n>What it does</h2>
       <div class="lnd-cards">
         <article class="lnd-card"><h3 data-i18n>Everything encrypted</h3><p data-i18n>Entries and attachments are sealed with your passphrase on your device. Locked means unreadable, including to this app.</p></article>
-        <article class="lnd-card"><h3 data-i18n>Exports that prove themselves</h3><p data-i18n>One zip: your files, the chain manifest, and a small python script anyone can run to verify the whole record without trusting Magpie.</p></article>
+        <article class="lnd-card"><h3 data-i18n>Exports that prove themselves</h3><p data-i18n>One zip: your files, the chain manifest, and a small python script that verifies the whole record without trusting Magpie. Anyone technical, a lawyer's IT person, a techie friend, can run it.</p></article>
         <article class="lnd-card"><h3 data-i18n>Nothing leaves your device</h3><p data-i18n>No accounts, no cloud, no analytics. The Android app has no internet permission at all, which you can check in the manifest.</p></article>
       </div>
     </section>
@@ -82,7 +82,7 @@
     <h1>Magpie</h1>
     <form id="lock-form" class="card form">
       <label data-i18n for="lock-pass">Passphrase</label>
-      <input id="lock-pass" type="password" autocomplete="current-password" required>
+      <input id="lock-pass" type="password" autocomplete="current-password" required aria-describedby="lock-error">
       <p id="lock-error" class="warn-line" hidden data-i18n>That passphrase does not open this journal.</p>
       <button class="btn-primary" type="submit" data-testid="unlock" data-i18n>Unlock</button>
     </form>
@@ -92,7 +92,7 @@
 <!-- ========================================================= timeline -->
 <section id="screen-timeline" class="screen" hidden>
   <header class="topbar">
-    <strong>Magpie</strong>
+    <h1>Magpie</h1>
     <span id="chain-badge" class="chain-badge" role="status"></span>
     <span class="top-space"></span>
     <button id="btn-verify" class="btn-ghost" data-testid="verify" data-i18n>Verify</button>
@@ -116,8 +116,10 @@
         <option value="60" selected data-i18n>1 minute</option>
         <option value="300" data-i18n>5 minutes</option>
       </select>
-      <p class="warn-line" data-i18n>Delete everything: type DELETE below and press the button. There is no undo and no copy anywhere else.</p>
-      <input id="wipe-confirm" type="text" autocomplete="off">
+      <p id="export-reminder" class="hint-line" role="status"></p>
+      <p id="wipe-warn" class="warn-line" data-i18n>Delete everything: type DELETE below and press the button. There is no undo and no copy anywhere else.</p>
+      <label for="wipe-confirm" data-i18n>Type DELETE to confirm</label>
+      <input id="wipe-confirm" type="text" autocomplete="off" aria-describedby="wipe-warn">
       <button id="btn-wipe" class="btn-danger" disabled data-i18n>Delete the whole journal</button>
     </div>
   </details>
@@ -127,7 +129,7 @@
 <section id="screen-add" class="screen" hidden>
   <header class="topbar">
     <button id="btn-add-cancel" class="icon-btn" data-i18n-attr="aria-label" aria-label="Cancel">✕</button>
-    <strong data-i18n>New entry</strong>
+    <h1 id="add-heading" data-i18n>New entry</h1>
   </header>
   <form id="add-form" class="form add-form">
     <label data-i18n for="add-title">What happened, in a few words</label>
@@ -140,7 +142,8 @@
       <input id="attach-input" type="file" hidden>
     </div>
     <p id="attach-name" class="attach-name" hidden></p>
-    <p class="warn-line" data-i18n>Entries cannot be edited or deleted once chained. Get it right, or add a follow-up entry that corrects it.</p>
+    <p class="hint-line" data-i18n>Attached photos keep their own metadata, including location if your camera records it. That is often part of the evidence; if you would rather it not travel with the file, strip it in another app before attaching here.</p>
+    <p class="warn-line" data-i18n>Entries cannot be edited or deleted once chained: this saves it permanently. Get it right, or add a follow-up entry that corrects it.</p>
     <button class="btn-primary" type="submit" data-testid="save-entry" data-i18n>Chain this entry</button>
   </form>
 </section>
@@ -149,7 +152,7 @@
 <section id="screen-entry" class="screen" hidden>
   <header class="topbar">
     <button id="btn-entry-back" class="icon-btn" data-i18n-attr="aria-label" aria-label="Back">←</button>
-    <strong id="entry-title"></strong>
+    <h1 id="entry-title" tabindex="-1"></h1>
   </header>
   <div class="entry-body">
     <p id="entry-meta" class="entry-meta"></p>
@@ -164,10 +167,10 @@
 <section id="screen-export" class="screen" hidden>
   <header class="topbar">
     <button id="btn-export-back" class="icon-btn" data-i18n-attr="aria-label" aria-label="Back">←</button>
-    <strong data-i18n>Export</strong>
+    <h1 id="export-title" tabindex="-1" data-i18n>Export</h1>
   </header>
   <div class="entry-body">
-    <p data-i18n>The export is a plain zip: your entries, your files, and a small script that lets anyone verify the chain without Magpie.</p>
+    <p data-i18n>The export is a plain zip: your entries, your files, and a small script that lets anyone verify the chain without Magpie. The zip itself is not encrypted; whoever holds it can open everything inside, so send it only where you mean the contents to be readable.</p>
     <div class="done-actions">
       <button id="btn-export-share" class="btn-primary" data-testid="share-export" data-i18n>Share</button>
       <button id="btn-export-save" class="btn-primary" data-i18n>Save</button>

@@ -2,6 +2,12 @@
 // stays the always-complete baseline (an untranslated string degrades to
 // English, never to a blank), tests keep asserting real copy, and extraction
 // is mechanical. Catalogs are plain modules shipped like everything else.
+//
+// Adding a locale: copy strings-es.js to strings-XX.js, translate every
+// value (leave the English keys alone; they are what t() looks up), import
+// it and add it to CATALOGS below, and list it in LOCALE_CHOICES. Run
+// `node tools/extract-strings.mjs` to see what is missing or stale against
+// the current app/index.html and app/js/*.js; it is the same check CI runs.
 
 import { es } from "./strings-es.js";
 

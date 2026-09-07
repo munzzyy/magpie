@@ -16,6 +16,7 @@ const PRECACHE = [
   "/js/zip.js",
   "/js/export.js",
   "/js/platform.js",
+  "/js/env.js",
   "/js/i18n.js",
   "/js/strings-es.js",
   "/icons/magpie.svg",
