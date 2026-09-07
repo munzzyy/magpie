@@ -17,7 +17,7 @@ the final hash stops matching. Everything is encrypted on your device with
 your passphrase; locked means unreadable, including to the app.
 
 The export is the point. One zip holds your files, the chain manifest, and
-a small python script. Anyone can run it, no Magpie required, and confirm
+a small Python script. Anyone can run it, no Magpie required, and confirm
 the whole record is exactly as chained. And the head hash, one line, pins
 the entire journal: email it to yourself or anyone you trust, and from
 that moment you can prove the record existed in exactly this state.
@@ -29,21 +29,25 @@ that moment you can prove the record existed in exactly this state.
 ## Get it
 
 Android: install [magpie.apk](https://github.com/munzzyy/magpie/releases/latest/download/magpie.apk)
-(the link always points at the current release, so Obtainium can track
-it). Web: serve `app/` from any static host; no build step, no server
-side.
+on Android 10 or newer; the link always points at the current release,
+so Obtainium can track it. On the web it is a static page with no server
+side at all.
 
 ## Check the claims
 
-`npm test` runs the chain, crypto, and zip suites. The export verifier is
-re-implemented in pure python stdlib and tested against JS-built exports
+`npm test` runs the chain, crypto, service-worker, and zip suites; the
+zip suite cross-checks against python3 and system unzip, so have both
+around. The export verifier is re-implemented in pure Python stdlib and
+tested against JS-built exports
 with deliberate tampering, so the two can never silently drift. `npm run
 e2e` drives the real app in Chromium and then greps the raw IndexedDB
 bytes for the test's plaintext canaries: titles, notes, and attachment
 bytes must never appear unencrypted at rest, and the exported zip is
-verified by python, outside the app. The Android APK requests no
-permissions; photos arrive through the system camera app, and the OS
-refuses every network connection.
+verified by Python, outside the app. The APK requests no Android
+permissions; its one manifest entry is androidx's self-scoped
+not-exported marker, which grants nothing, and CI fails the build if
+anything real ever appears. Photos arrive through the system camera app,
+and the OS refuses every network connection.
 
 ## What it is not
 
@@ -55,8 +59,17 @@ device your adversary already controls.
 
 ## Run it
 
-Web: serve `app/` from any static host, or `node test/serve_local.mjs`
-locally. No build step, no dependencies. Android:
-`cd android && ./gradlew assembleRelease`.
+For development: `node test/serve_local.mjs` serves the web app, and
+`cd android && ./gradlew assembleDebug` builds an installable debug APK
+(release signing goes through `tools/release-android.sh`).
+
+## Bugs, holes, contributions
+
+A way to change a chained entry without breaking verification is the bug
+that matters; [SECURITY.md](SECURITY.md) has the private route for that.
+Everything else: issues and pull requests are open and welcome. Releases
+list the APK's sha256 and signing certificate digest, and
+[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) says plainly what the chain
+does and does not prove.
 
 MIT.
