@@ -13,4 +13,12 @@ magick -background none "$fg" -resize 162x162 "$res/mipmap-hdpi/ic_launcher_fg.p
 magick -background none "$fg" -resize 216x216 "$res/mipmap-xhdpi/ic_launcher_fg.png"
 magick -background none "$fg" -resize 324x324 "$res/mipmap-xxhdpi/ic_launcher_fg.png"
 magick -background none "$fg" -resize 432x432 "$res/mipmap-xxxhdpi/ic_launcher_fg.png"
+
+# iOS wants a full-bleed opaque square; the brand background fills the
+# rounded corners invisibly and iOS applies its own mask.
+magick -size 1024x1024 xc:'#17697a' \
+  \( -background none app/icons/magpie.svg -resize 1024x1024 \) \
+  -composite -alpha off ios/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png
+magick -background none app/icons/magpie.svg -resize 180x180 \
+  -size 180x180 xc:'#17697a' +swap -composite -alpha off app/icons/apple-touch-icon.png
 echo "icons regenerated"

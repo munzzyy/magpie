@@ -9,8 +9,8 @@ export const es = {
   "Create your journal": "Crea tu diario",
   "Passphrase": "Frase de acceso",
   "Same passphrase again": "La misma frase otra vez",
-  "There is no reset and no recovery. If this passphrase is lost, the journal is gone. Four random words you can remember beat clever symbols you cannot.":
-    "No hay restablecimiento ni recuperación. Si esta frase se pierde, el diario se pierde. Cuatro palabras al azar que recuerdes valen más que símbolos ingeniosos que no.",
+  "At least 8 characters. There is no reset and no recovery. If this passphrase is lost, the journal is gone. Four random words you can remember beat clever symbols you cannot.":
+    "Al menos 8 caracteres. No hay restablecimiento ni recuperación. Si esta frase se pierde, el diario se pierde. Cuatro palabras al azar que recuerdes valen más que símbolos ingeniosos que no.",
   "Create": "Crear",
   "Why a journal needs a chain": "Por qué un diario necesita una cadena",
   "A folder of screenshots proves almost nothing: files re-save, dates change, entries vanish. Magpie hashes every entry together with the one before it. Change anything, anywhere, and the final hash stops matching. Share that one hash early, with a friend, a lawyer, or your own email, and you can later prove the whole record existed exactly as it is now.":
@@ -20,8 +20,8 @@ export const es = {
   "Entries and attachments are sealed with your passphrase on your device. Locked means unreadable, including to this app.":
     "Las entradas y los adjuntos se sellan con tu frase en tu dispositivo. Bloqueado significa ilegible, incluso para esta app.",
   "Exports that prove themselves": "Exportaciones que se prueban solas",
-  "One zip: your files, the chain manifest, and a small python script anyone can run to verify the whole record without trusting Magpie.":
-    "Un zip: tus archivos, el manifiesto de la cadena y un pequeño script de python que cualquiera puede ejecutar para verificar todo el registro sin confiar en Magpie.",
+  "One zip: your files, the chain manifest, and a small python script that verifies the whole record without trusting Magpie. Anyone technical, a lawyer's IT person, a techie friend, can run it.":
+    "Un zip: tus archivos, el manifiesto de la cadena y un pequeño script de python que verifica todo el registro sin confiar en Magpie. Puede ejecutarlo cualquiera con algo de conocimiento técnico: el informático de un abogado, un amigo que entiende de esto.",
   "Nothing leaves your device": "Nada sale de tu dispositivo",
   "No accounts, no cloud, no analytics. The Android app has no internet permission at all, which you can check in the manifest.":
     "Sin cuentas, sin nube, sin analíticas. La app de Android no tiene permiso de internet en absoluto, y puedes comprobarlo en el manifiesto.",
@@ -55,6 +55,7 @@ export const es = {
   "5 minutes": "5 minutos",
   "Delete everything: type DELETE below and press the button. There is no undo and no copy anywhere else.":
     "Borrar todo: escribe DELETE abajo y pulsa el botón. No hay deshacer y no existe copia en ningún otro sitio.",
+  "Type DELETE to confirm": "Escribe DELETE para confirmar",
   "Delete the whole journal": "Borrar el diario entero",
 
   "New entry": "Nueva entrada",
@@ -63,14 +64,16 @@ export const es = {
   "Details": "Detalles",
   "Attach a file": "Adjuntar un archivo",
   "Take a photo": "Tomar una foto",
-  "Entries cannot be edited or deleted once chained. Get it right, or add a follow-up entry that corrects it.":
-    "Las entradas no se pueden editar ni borrar una vez encadenadas. Hazlo bien, o añade una entrada posterior que lo corrija.",
+  "Attached photos keep their own metadata, including location if your camera records it. That is often part of the evidence; if you would rather it not travel with the file, strip it in another app before attaching here.":
+    "Las fotos adjuntas conservan sus propios metadatos, incluida la ubicación si tu cámara la registra. Muchas veces eso forma parte de la prueba; si prefieres que no viaje con el archivo, quítala en otra app antes de adjuntarla aquí.",
+  "Entries cannot be edited or deleted once chained: this saves it permanently. Get it right, or add a follow-up entry that corrects it.":
+    "Las entradas no se pueden editar ni borrar una vez encadenadas: esto la guarda de forma permanente. Hazlo bien, o añade una entrada posterior que lo corrija.",
   "Chain this entry": "Encadenar esta entrada",
   "Back": "Atrás",
   "Entry hash": "Hash de la entrada",
 
-  "The export is a plain zip: your entries, your files, and a small script that lets anyone verify the chain without Magpie.":
-    "La exportación es un zip normal: tus entradas, tus archivos y un pequeño script que permite a cualquiera verificar la cadena sin Magpie.",
+  "The export is a plain zip: your entries, your files, and a small script that lets anyone verify the chain without Magpie. The zip itself is not encrypted; whoever holds it can open everything inside, so send it only where you mean the contents to be readable.":
+    "La exportación es un zip normal: tus entradas, tus archivos y un pequeño script que permite a cualquiera verificar la cadena sin Magpie. El zip en sí no está cifrado; quien lo tenga puede abrir todo lo que hay dentro, así que envíalo solo a donde quieras que el contenido pueda leerse.",
   "Share": "Compartir",
   "Save": "Guardar",
   "Anchor the record": "Ancla el registro",
@@ -100,4 +103,13 @@ export const es = {
   "The two passphrases do not match.": "Las dos frases no coinciden.",
   "Sharing is not available here, so it downloaded instead.": "Compartir no está disponible aquí, así que se descargó en su lugar.",
   "Downloaded": "Descargado",
+  "Choose where to send it.": "Elige a dónde enviarlo.",
+  "Choose where to save it.": "Elige dónde guardarlo.",
+  "This build of Magpie cannot get the export out of the app. Update it and try again.":
+    "Esta versión de Magpie no puede sacar la exportación de la app. Actualízala e inténtalo de nuevo.",
+  "Could not hand off the export.": "No se pudo entregar la exportación.",
+  "You have not exported this journal yet. Keep a copy somewhere safe.":
+    "Todavía no has exportado este diario. Guarda una copia en un lugar seguro.",
+  "Exported today.": "Exportado hoy.",
+  "{days} day(s) since your last export.": "{days} día(s) desde tu última exportación.",
 };

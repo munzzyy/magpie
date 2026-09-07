@@ -1,0 +1,26 @@
+La gente documenta sus disputas con la cámara del móvil y una app de notas,
+y meses después eso no prueba nada: los archivos se reguardan, las fechas
+cambian, las entradas desaparecen.
+
+Magpie es un diario de incidentes con pruebas:
+
+* Cada entrada (foto, nota, archivo) queda encadenada por hash a la
+  anterior. Editar, reordenar o borrar algo rompe la cadena de forma
+  visible.
+* Todo se cifra en tu dispositivo con tu frase de acceso. Bloqueado
+  significa ilegible, incluso para la app.
+* Las exportaciones son zips normales con tus archivos, el manifiesto de
+  la cadena y un pequeño script de python que cualquiera puede ejecutar
+  para verificar el registro sin Magpie.
+* Comparte pronto la cabeza de la cadena, una sola línea (envíatela por
+  correo, mándasela a alguien de confianza) y todo el registro queda
+  fijado a ese momento.
+
+Esta app no pide permisos. Las fotos entran por la cámara del sistema, y
+el sistema operativo rechaza cualquier conexión de red. Sin cuentas, sin
+analíticas, sin dependencias. Licencia MIT.
+
+Límites honestos: que algo sea a prueba de manipulación no lo hace
+admisible en un tribunal por sí solo, las marcas de tiempo del
+dispositivo son afirmaciones hasta que se anclan, y no hay recuperación
+de la frase de acceso, a propósito.

@@ -26,6 +26,24 @@ Quiet deletion breaks loudly. Remove an entry from the middle and every
 hash after it stops matching. The badge on the timeline recomputes the
 whole chain each time it paints.
 
+## What the export does NOT protect
+
+The export zip is not encrypted. Building it takes the entries out of the
+vault and writes them as plain files so the standalone Python verifier can
+check them without touching Magpie's crypto at all; that is also what makes
+it readable by anyone who gets a copy. Send it only where you mean the
+contents to be readable, and encrypt the zip yourself (a password-protected
+archive, an encrypted email attachment) before it leaves your hands if that
+matters for where it is going.
+
+Photos and files you attach keep whatever metadata they already carry,
+including GPS location if your camera records it and the device/software
+details most cameras embed by default. Magpie does not strip any of that,
+on purpose: for an incident journal, where and when a photo was taken can
+itself be part of what you are trying to prove. If you would rather a
+specific attachment not carry its location, strip it in another app before
+attaching it here; Magpie does not do that for you today.
+
 ## What anchoring means, and why you should do it
 
 A hash chain on one device proves internal consistency, not time. The
@@ -75,5 +93,11 @@ Exports go exactly where you send them.
 
 WebCrypto in your browser or WebView, which is the same primitive your
 bank relies on. About two thousand lines of dependency-free JavaScript
-plus a thin Kotlin shell, MIT licensed. And your own passphrase habits:
-four random words remembered beat anything clever forgotten.
+plus a thin native shell, MIT licensed: Kotlin on Android, Swift on iOS.
+Both shells exist to serve the same bundle and, on iOS, to hand exports to
+the system share sheet; neither adds crypto or storage logic of its own.
+The iOS shell's network guarantee rests on a page-level CSP rather than an
+OS permission Android can revoke outright; see
+[docs/IOS.md](IOS.md) for exactly what that difference means. And your own
+passphrase habits: four random words remembered beat anything clever
+forgotten.

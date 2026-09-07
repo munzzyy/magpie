@@ -46,3 +46,25 @@ jobs:
           if echo "$out" | grep -E "uses-permission" | grep -v "DYNAMIC_RECEIVER_NOT_EXPORTED"; then
             echo "unexpected permission crept into the manifest"; exit 1
           fi
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: generate the xcode project
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate
+      - name: build for the simulator
+        run: |
+          cd ios && xcodebuild -project Magpie.xcodeproj -target Magpie \
+            -configuration Release -sdk iphonesimulator \
+            CODE_SIGNING_ALLOWED=NO SYMROOT="$PWD/build" build
+      - name: assert no permission prompts
+        run: |
+          plist=ios/build/Release-iphonesimulator/Magpie.app/Info.plist
+          out=$(plutil -p "$plist")
+          echo "$out"
+          if echo "$out" | grep -E "UsageDescription|NSAppTransportSecurity"; then
+            echo "a permission prompt or ATS exception crept into the manifest"; exit 1
+          fi

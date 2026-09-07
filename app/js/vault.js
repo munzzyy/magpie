@@ -85,6 +85,13 @@ export async function setup(passphrase) {
   head = GENESIS;
   count = 0;
   await saveState();
+  // Best-effort: ask the browser not to evict this origin's storage under
+  // pressure. A plain Safari tab and an installed Home Screen copy get
+  // separate storage containers either way; this only changes eviction
+  // behavior within whichever one the journal was created in.
+  try {
+    await navigator.storage?.persist?.();
+  } catch {}
 }
 
 export async function unlock(passphrase) {
