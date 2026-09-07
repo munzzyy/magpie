@@ -1,0 +1,16 @@
+{
+  "name": "magpie",
+  "version": "0.1.0",
+  "description": "A tamper-evident incident journal. Photos, notes, and files, hash-chained and encrypted on your device.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "e2e": "node test/e2e_app.mjs && node test/e2e_wrapper.mjs",
+    "check": "bash tools/check-clean.sh"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
