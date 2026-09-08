@@ -186,9 +186,11 @@ async function refreshBadge(count) {
   // if it ever slows down, the Verify button stays the source of truth.
   const res = await vault.verify();
   badge.className = `chain-badge ${res.ok ? "ok" : "bad"}`;
-  badge.textContent = res.ok
-    ? t("{count} entries, chain intact", { count })
-    : t("CHAIN BROKEN at entry {seq}", { seq: res.badSeq ?? "?" });
+  badge.textContent = !res.ok
+    ? t("CHAIN BROKEN at entry {seq}", { seq: res.badSeq ?? "?" })
+    : res.timeWarning
+      ? t("{count} entries, chain intact (entry {seq}'s time is earlier than the one before it)", { count, seq: res.timeWarning })
+      : t("{count} entries, chain intact", { count });
 }
 
 async function openEntry(entry, hash) {
@@ -501,9 +503,14 @@ function wireEvents() {
   $("btn-verify").addEventListener("click", async () => {
     const res = await vault.verify();
     toast(
-      res.ok
-        ? t("Chain intact: {count} entries verify.", { count: res.count })
-        : t("CHAIN BROKEN at entry {seq}.", { seq: res.badSeq ?? "?" }),
+      !res.ok
+        ? t("CHAIN BROKEN at entry {seq}.", { seq: res.badSeq ?? "?" })
+        : res.timeWarning
+          ? t("Chain intact: {count} entries verify. Entry {seq}'s time is earlier than the one before it.", {
+              count: res.count,
+              seq: res.timeWarning,
+            })
+          : t("Chain intact: {count} entries verify.", { count: res.count }),
       6000,
     );
     await refreshBadge(res.count);
