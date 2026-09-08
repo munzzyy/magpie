@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+The chain proves order, not the clock.
+
+- verifyChain and verify.py both certified a chain clean even when an
+  entry's timestamp was earlier than the one before it, a device clock
+  jumping back for any reason (drift, a time zone change, a reset) and
+  nobody noticing. Both now catch it and say so: the badge and the export
+  verifier report a warning naming the entry, never a rejection. Refusing
+  to record something because a clock moved would be worse than the drift
+  itself, and the chain was never proving clock order to begin with, only
+  that each entry was added after the one before it.
+
 ## 0.3.0
 
 The journal grows a spine, a backup, and a longer memory.
