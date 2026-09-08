@@ -86,9 +86,13 @@ export const es = {
   "photo": "foto",
   "file": "archivo",
   "{count} entries, chain intact": "{count} entradas, cadena intacta",
+  "{count} entries, chain intact (entry {seq}'s time is earlier than the one before it)":
+    "{count} entradas, cadena intacta (la hora de la entrada {seq} es anterior a la de la entrada previa)",
   "CHAIN BROKEN at entry {seq}": "CADENA ROTA en la entrada {seq}",
   "CHAIN BROKEN at entry {seq}.": "CADENA ROTA en la entrada {seq}.",
   "Chain intact: {count} entries verify.": "Cadena intacta: {count} entradas verifican.",
+  "Chain intact: {count} entries verify. Entry {seq}'s time is earlier than the one before it.":
+    "Cadena intacta: {count} entradas verifican. La hora de la entrada {seq} es anterior a la de la entrada previa.",
   "Entry {seq} chained": "Entrada {seq} encadenada",
   "Attached: {name} ({kb} KB)": "Adjunto: {name} ({kb} KB)",
   "{count} more shared file(s) waiting; each becomes its own entry.":

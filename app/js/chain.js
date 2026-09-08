@@ -20,25 +20,33 @@ export async function entryHash(prevHash, entry) {
   return sha256Hex(enc.encode(`${prevHash}\n${canonical(entry)}`));
 }
 
-// Recomputes the whole chain. Returns { ok, head, count, badSeq } where
-// badSeq is the first entry whose recorded hash does not match, or whose
-// seq is out of order.
+// Recomputes the whole chain. Returns { ok, head, count, badSeq, timeWarning }
+// where badSeq is the first entry whose recorded hash does not match, or
+// whose seq is out of order, and timeWarning is the first entry whose ts is
+// earlier than the entry before it. The chain proves insertion order, not
+// clock order, so a backwards timestamp is a warning, never a failure:
+// clocks drift and phones change time zones, and refusing to record
+// something because of that would be worse than the drift itself.
 export async function verifyChain(entries, recordedHashes, recordedHead) {
   let prev = GENESIS;
+  let prevTs = null;
+  let timeWarning = null;
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    if (entry.seq !== i + 1) return { ok: false, head: prev, count: i, badSeq: entry.seq };
+    if (entry.seq !== i + 1) return { ok: false, head: prev, count: i, badSeq: entry.seq, timeWarning };
     const h = await entryHash(prev, entry);
     if (recordedHashes && recordedHashes[i] && recordedHashes[i] !== h) {
-      return { ok: false, head: prev, count: i, badSeq: entry.seq };
+      return { ok: false, head: prev, count: i, badSeq: entry.seq, timeWarning };
     }
+    if (timeWarning === null && prevTs !== null && entry.ts < prevTs) timeWarning = entry.seq;
+    prevTs = entry.ts;
     prev = h;
   }
   // No emptiness exemption: a wiped entry store against a surviving head
   // must scream, not certify. A genuinely fresh vault has head === GENESIS
   // and passes on its own.
   if (recordedHead && recordedHead !== prev) {
-    return { ok: false, head: prev, count: entries.length, badSeq: null };
+    return { ok: false, head: prev, count: entries.length, badSeq: null, timeWarning };
   }
-  return { ok: true, head: prev, count: entries.length, badSeq: null };
+  return { ok: true, head: prev, count: entries.length, badSeq: null, timeWarning };
 }

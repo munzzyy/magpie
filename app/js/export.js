@@ -44,23 +44,31 @@ def verify_chain(base, manifest, entries, want_head_at=None):
     # Recomputes the chain from scratch. If want_head_at is given, also
     # returns the head hash after exactly that many entries, so a shorter
     # export's recorded head can be matched against a prefix of a longer one.
+    # warn_seq is the first entry whose ts is earlier than the entry before
+    # it: the chain proves insertion order, not clock order, so this is a
+    # warning, never a failure. Clocks drift and phones change time zones.
     prev = manifest["genesis"]
     prefix_head = None
+    prev_ts = None
+    warn_seq = None
     for i, e in enumerate(entries):
         if e["seq"] != i + 1:
-            return False, f"entry {i} has seq {e['seq']}", None
+            return False, f"entry {i} has seq {e['seq']}", None, None
         h = hashlib.sha256((prev + "\\n" + canonical(e)).encode()).hexdigest()
         prev = h
         if e.get("file"):
             path = os.path.join(base, "files", f"{e['seq']:03d}-" + e["_filename"])
             digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
             if digest != e["file"]["sha256"]:
-                return False, f"attachment for entry {e['seq']} does not match its recorded hash", None
+                return False, f"attachment for entry {e['seq']} does not match its recorded hash", None, None
+        if warn_seq is None and prev_ts is not None and e["ts"] < prev_ts:
+            warn_seq = e["seq"]
+        prev_ts = e["ts"]
         if want_head_at is not None and i + 1 == want_head_at:
             prefix_head = h
     if prev != manifest["head"]:
-        return False, f"recomputed head {prev} != recorded head {manifest['head']}", None
-    return True, prev, prefix_head
+        return False, f"recomputed head {prev} != recorded head {manifest['head']}", None, None
+    return True, prev, prefix_head, warn_seq
 
 def main():
     ap = argparse.ArgumentParser()
@@ -69,11 +77,15 @@ def main():
 
     base = os.path.dirname(os.path.abspath(__file__))
     manifest, entries = load(base)
-    ok, head_or_reason, _ = verify_chain(base, manifest, entries)
+    ok, head_or_reason, _, warn_seq = verify_chain(base, manifest, entries)
     if not ok:
         print("FAIL:", head_or_reason)
         sys.exit(1)
     print("OK:", len(entries), "entries verify; head", head_or_reason)
+    if warn_seq is not None:
+        print(f"WARNING: entry {warn_seq}'s recorded time is earlier than the entry before it.")
+        print("The chain still verifies. This only means a clock moved backward at some point,")
+        print("not that anything was tampered with.")
     print("This proves the export matches its manifest. It proves the log")
     print("existed in this exact state no LATER than the earliest moment the")
     print("head hash was shared with someone else.")
@@ -87,7 +99,7 @@ def main():
         if older_count > len(entries):
             print("FAIL: the older export has more entries than this one; it cannot be a prefix")
             sys.exit(1)
-        ok2, head2, prefix_head = verify_chain(base, manifest, entries, want_head_at=older_count)
+        ok2, head2, prefix_head, _ = verify_chain(base, manifest, entries, want_head_at=older_count)
         if not ok2:
             print("FAIL:", head2)
             sys.exit(1)

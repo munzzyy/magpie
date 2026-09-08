@@ -73,3 +73,42 @@ test("empty entry store against a real head fails verification", async () => {
   // A genuinely fresh vault still passes.
   assert.equal((await verifyChain([], [], GENESIS)).ok, true);
 });
+
+test("negative control: forward-only timestamps never raise a time warning", async () => {
+  const entries = [entry(1), entry(2), entry(3)];
+  const hashes = [];
+  let prev = GENESIS;
+  for (const e of entries) {
+    prev = await entryHash(prev, e);
+    hashes.push(prev);
+  }
+  const res = await verifyChain(entries, hashes, prev);
+  assert.equal(res.ok, true);
+  assert.equal(res.timeWarning, null);
+});
+
+test("a chain that goes backwards in time still verifies, but reports the first seq where it happened", async () => {
+  const entries = [entry(1), entry(2, { ts: "2026-09-06T12:00:00.000Z" }), entry(3)];
+  const hashes = [];
+  let prev = GENESIS;
+  for (const e of entries) {
+    prev = await entryHash(prev, e);
+    hashes.push(prev);
+  }
+  const res = await verifyChain(entries, hashes, prev);
+  assert.equal(res.ok, true);
+  assert.equal(res.timeWarning, 2);
+});
+
+test("a tampered hash after a backwards timestamp still fails; the warning does not mask tampering", async () => {
+  const entries = [entry(1), entry(2, { ts: "2026-09-06T12:00:00.000Z" }), entry(3)];
+  const hashes = [];
+  let prev = GENESIS;
+  for (const e of entries) {
+    prev = await entryHash(prev, e);
+    hashes.push(prev);
+  }
+  const edited = [entries[0], entries[1], entry(3, { note: "changed after the fact" })];
+  const res = await verifyChain(edited, hashes, prev);
+  assert.equal(res.ok, false);
+});
