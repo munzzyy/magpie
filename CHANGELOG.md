@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+The file buttons open something now.
+
+- Attaching a file to a note, and picking a backup to restore, both did
+  nothing: the button opened no file picker at all. The WebView had never
+  been handed a file-chooser, so every file input was dead. Both work now.
+
 ## 0.4.0
 
 The chain proves order, not the clock.

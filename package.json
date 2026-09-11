@@ -1,6 +1,6 @@
 {
   "name": "magpie",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A tamper-evident incident journal. Photos, notes, and files, hash-chained and encrypted on your device.",
   "type": "module",
   "private": true,

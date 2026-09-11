@@ -1,0 +1,1 @@
+Fix: the attach-file and restore-backup buttons opened no picker at all, so both were stuck. They work now.
