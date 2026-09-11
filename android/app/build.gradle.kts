@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.munzzyy.magpie"
         minSdk = 29
         targetSdk = 36
-        versionCode = 400
-        versionName = "0.4.0"
+        versionCode = 401
+        versionName = "0.4.1"
     }
 
     buildTypes {
