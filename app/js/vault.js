@@ -343,7 +343,16 @@ export async function wipe() {
 // this envelope look identical, on purpose, because AES-GCM cannot (and
 // should not be made to) tell "wrong key" apart from "tampered ciphertext".
 
-const toB64 = (bytes) => btoa(String.fromCharCode(...bytes));
+const toB64 = (bytes) => {
+  // Chunked because String.fromCharCode(...bigArray) blows the argument limit
+  // once a real attachment is in the box, which is exactly what a backup carries.
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+};
 const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const boxOut = (box) => ({ iv: toB64(box.iv), ct: toB64(box.ct) });
 const boxIn = (o) => ({ iv: fromB64(o.iv), ct: fromB64(o.ct) });

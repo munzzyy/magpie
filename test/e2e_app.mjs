@@ -171,7 +171,10 @@ async function main() {
     // files living in another process's temp directory.
     mkdirSync(path.join(ROOT, "test", "fixtures"), { recursive: true });
     const canaryFile = path.join(ROOT, "test", "fixtures", "evidence.bin");
-    writeFileSync(canaryFile, `${CANARY_BYTES} repeated ${CANARY_BYTES}`);
+    // Padded past 512KB on purpose: a small attachment let a real bug through
+    // where exportBackup base64-encoded the sealed file by spreading the whole
+    // byte array as call arguments, which throws once an attachment is this big.
+    writeFileSync(canaryFile, `${CANARY_BYTES} repeated ${CANARY_BYTES} ` + "E".repeat(768 * 1024));
     await c.evalJs("document.getElementById('btn-add').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add'"), "add screen 2");
     const { root } = (await c.send("DOM.getDocument")).result;
@@ -347,7 +350,7 @@ async function main() {
     const mutated = await c.evalJs(
       `(async () => {
         const { deriveKey, seal, open } = await import("/js/cryptobox.js");
-        const toB64 = (b) => btoa(String.fromCharCode(...b));
+        const toB64 = (b) => { let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
         const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
         const boxIn = (o) => ({ iv: fromB64(o.iv), ct: fromB64(o.ct) });
         const boxOut = (b) => ({ iv: toB64(b.iv), ct: toB64(b.ct) });

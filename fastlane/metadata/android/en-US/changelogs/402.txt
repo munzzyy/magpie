@@ -1,0 +1,1 @@
+Fix: sealing a backup failed once a note carried a file of any real size. Backups handle attachments of any size now.
