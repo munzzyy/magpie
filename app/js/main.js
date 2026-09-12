@@ -8,7 +8,7 @@ import { isWrapper, wrapperVersion, shareOut, saveOut, canCapture, capturePhoto,
 import { isBundled } from "./env.js";
 import { setLocale, resolveLocale, translateDom, t, LOCALE_CHOICES } from "./i18n.js";
 
-const VERSION = "0.4.2";
+const VERSION = "0.4.3";
 
 globalThis.__magpieErrors = [];
 window.addEventListener("error", (ev) => __magpieErrors.push(String(ev.message)));
@@ -44,6 +44,12 @@ let pendingAttach = null;
 let exportBlob = null;
 let exportState = null;
 let entryUrls = [];
+
+// An attachment is read, sealed, and base64-encoded whole in memory, so a very
+// large file exhausts RAM and the OS kills the app before it lands. Refuse it up
+// front, by File.size, before anything reads it into memory.
+const MAX_ATTACH_MB = 50;
+const MAX_ATTACH_BYTES = MAX_ATTACH_MB * 1024 * 1024;
 // The last-rendered, already-decrypted rows: search filters this in memory
 // only, never re-touches the vault, and is thrown away on lock.
 let currentRows = [];
@@ -222,6 +228,10 @@ async function openEntry(entry, hash) {
 // ------------------------------------------------------------------- add
 
 function setPendingAttach(bytes, name, mime) {
+  if (bytes.length > MAX_ATTACH_BYTES) {
+    toast(t("{name} is too big to attach; the limit is {mb} MB.", { name, mb: MAX_ATTACH_MB }));
+    return;
+  }
   pendingAttach = { bytes, name, mime };
   const line = $("attach-name");
   line.textContent = t("Attached: {name} ({kb} KB)", {
@@ -477,8 +487,14 @@ function wireEvents() {
 
   $("btn-attach").addEventListener("click", () => $("attach-input").click());
   $("attach-input").addEventListener("change", async () => {
-    const files = [...$("attach-input").files];
+    const picked = [...$("attach-input").files];
     $("attach-input").value = "";
+    if (!picked.length) return;
+    const files = picked.filter((f) => f.size <= MAX_ATTACH_BYTES);
+    if (files.length < picked.length) {
+      const big = picked.find((f) => f.size > MAX_ATTACH_BYTES);
+      toast(t("{name} is too big to attach; the limit is {mb} MB.", { name: big.name, mb: MAX_ATTACH_MB }));
+    }
     if (!files.length) return;
     const [first, ...rest] = files;
     // One pick, N chained entries: the first file stages this entry like
