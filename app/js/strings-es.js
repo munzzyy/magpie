@@ -99,6 +99,8 @@ export const es = {
     "{count} archivo(s) compartidos más en espera; cada uno será su propia entrada.",
   "Could not save the entry.": "No se pudo guardar la entrada.",
   "Could not read the shared file.": "No se pudo leer el archivo compartido.",
+  "{name} is too big to attach; the limit is {mb} MB.":
+    "{name} es demasiado grande para adjuntar; el límite es de {mb} MB.",
   "Could not build the export.": "No se pudo generar la exportación.",
   "Unlock to attach the shared file.": "Desbloquea para adjuntar el archivo compartido.",
   "Unlock to attach your photo.": "Desbloquea para adjuntar tu foto.",

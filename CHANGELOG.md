@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3
+
+A file too big to hold is turned away, not a crash.
+
+- Picking a very large file to attach used to take the app down: it read the
+  whole thing into memory before anything could stop it. Attachments are
+  capped at 50 MB now, and anything larger is refused up front with a message,
+  so the app stays standing.
+
 ## 0.4.2
 
 Backups survive a real attachment.

@@ -1,0 +1,1 @@
+Fix: a very large attachment could crash the app. Attachments are capped at 50 MB now, and larger files are refused with a message instead.

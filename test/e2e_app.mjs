@@ -216,6 +216,23 @@ async function main() {
     const s1b = await c.send("Page.captureScreenshot", { format: "png" });
     writeFileSync(path.join(SHOTS, "03-timeline-chain.png"), Buffer.from(s1b.result.data, "base64"));
 
+    // -------------------------------------- oversized attachment is refused
+    // Refused by File.size before any read, so a huge pick can't OOM the app.
+    // Regression: a ~500MB video pick used to crash it (found in review).
+    const bigFile = path.join(ROOT, "test", "fixtures", "toobig.bin");
+    writeFileSync(bigFile, Buffer.alloc(51 * 1024 * 1024));
+    await c.evalJs("document.getElementById('btn-add').click(); 'ok'");
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add'"), "add screen 4");
+    const { root: rootBig } = (await c.send("DOM.getDocument")).result;
+    const inputBig = (await c.send("DOM.querySelector", { nodeId: rootBig.nodeId, selector: "#attach-input" })).result;
+    await c.send("DOM.setFileInputFiles", { nodeId: inputBig.nodeId, files: [bigFile] });
+    await waitFor(() => c.evalJs("document.getElementById('toast').classList.contains('show')"), "oversized reject toast");
+    check("oversized attachment: refused, nothing staged", (await c.evalJs("document.getElementById('attach-name').hidden")) === true);
+    check("oversized attachment: toast names the 50 MB limit", (await c.evalJs("document.getElementById('toast').textContent")).includes("50 MB"));
+    await c.evalJs("document.getElementById('btn-add-cancel').click(); 'ok'");
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "timeline after refusal");
+    check("oversized attachment: added no entry", (await c.evalJs("document.querySelectorAll('#timeline li').length")) === 4);
+
     // ---------------------------------------------------- in-memory search
     await c.evalJs(`(() => { document.getElementById("search-timeline").value = "Broken window"; document.getElementById("search-timeline").dispatchEvent(new Event("input")); })()`);
     check("search: matching entry stays visible", (await c.evalJs("document.querySelectorAll('#timeline li:not([hidden])').length")) === 1);
