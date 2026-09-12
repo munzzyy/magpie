@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2
+
+Backups survive a real attachment.
+
+- Sealing a backup of a journal that held a file of any real size failed:
+  the encode step spread the whole attachment across a single function call
+  and hit the argument limit. It builds the base64 in chunks now, so a backup
+  carries its attachments no matter how big they are.
+
 ## 0.4.1
 
 The file buttons open something now.
