@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- License moved from MIT to GPL-3.0-or-later.
+
 ## 0.4.3
 
 A file too big to hold is turned away, not a crash.

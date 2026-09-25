@@ -18,7 +18,7 @@ Magpie es un diario de incidentes con pruebas:
 
 Esta app no pide permisos. Las fotos entran por la cámara del sistema, y
 el sistema operativo rechaza cualquier conexión de red. Sin cuentas, sin
-analíticas, sin dependencias. Licencia MIT.
+analíticas, sin dependencias. Licencia GPL-3.0-or-later.
 
 Límites honestos: que algo sea a prueba de manipulación no lo hace
 admisible en un tribunal por sí solo, las marcas de tiempo del

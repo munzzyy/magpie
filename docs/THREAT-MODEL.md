@@ -93,7 +93,7 @@ Exports go exactly where you send them.
 
 WebCrypto in your browser or WebView, which is the same primitive your
 bank relies on. About two thousand lines of dependency-free JavaScript
-plus a thin native shell, MIT licensed: Kotlin on Android, Swift on iOS.
+plus a thin native shell, GPL-3.0-or-later licensed: Kotlin on Android, Swift on iOS.
 Both shells exist to serve the same bundle and, on iOS, to hand exports to
 the system share sheet; neither adds crypto or storage logic of its own.
 The iOS shell's network guarantee rests on a page-level CSP rather than an

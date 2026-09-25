@@ -1,6 +1,6 @@
 # Magpie
 
-[![release](https://img.shields.io/github/v/release/munzzyy/magpie)](https://github.com/munzzyy/magpie/releases/latest) [![ci](https://github.com/munzzyy/magpie/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/magpie/actions/workflows/ci.yml) [![license: MIT](https://img.shields.io/badge/license-MIT-17697a)](LICENSE)
+[![release](https://img.shields.io/github/v/release/munzzyy/magpie)](https://github.com/munzzyy/magpie/releases/latest) [![ci](https://github.com/munzzyy/magpie/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/magpie/actions/workflows/ci.yml) [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-17697a)](LICENSE)
 
 A journal that can prove itself.
 
@@ -102,4 +102,4 @@ signed release, so anyone can diff the two) would close that gap; it is not
 built yet. Until it is, verifying the APK against this source means reading
 the source and building it yourself.
 
-MIT.
+[GPL-3.0-or-later](LICENSE). You can use, study, change and share it. If you distribute a copy or a modified version, it has to stay under the GPL and come with its source. Releases up to v0.4.3 were under MIT.

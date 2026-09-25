@@ -14,7 +14,7 @@ Magpie is an incident journal with receipts:
 
 This app requests no permissions. Photos come through the system camera,
 and the operating system refuses every network connection. No accounts,
-no analytics, no dependencies. MIT licensed.
+no analytics, no dependencies. GPL-3.0-or-later licensed.
 
 Honest limits: tamper-evident is not court-admissible by itself, device
 timestamps are claims until anchored, and there is no passphrase
