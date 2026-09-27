@@ -2,6 +2,8 @@
 
 [![release](https://img.shields.io/github/v/release/munzzyy/magpie)](https://github.com/munzzyy/magpie/releases/latest) [![ci](https://github.com/munzzyy/magpie/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/magpie/actions/workflows/ci.yml) [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-17697a)](LICENSE)
 
+[<img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/io.github.munzzyy.magpie/)
+
 A journal that can prove itself.
 
 People document the disputes in their lives with a camera roll and a notes
