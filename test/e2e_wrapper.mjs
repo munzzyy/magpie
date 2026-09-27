@@ -112,6 +112,11 @@ async function main() {
     await waitFor(() => c.evalJs("!!window.__magpieApi && __magpieApi.state.screen === 'setup'"), "setup screen");
 
     check("wrapper: web-only sections removed", (await c.evalJs("document.querySelectorAll('.web-only').length")) === 0);
+    check("wrapper: author credit revealed", !(await c.evalJs("document.getElementById('about-site').hidden")));
+    check(
+      "wrapper: author credit links to the author, not the repo",
+      (await c.evalJs("document.querySelector('#about-site a').href")) === "https://github.com/munzzyy",
+    );
     check("wrapper: shared token queued while locked", (await c.evalJs("__magpieApi.state.pendingShared")) === 1);
 
     await c.evalJs(`(() => {

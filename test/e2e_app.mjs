@@ -135,6 +135,7 @@ async function main() {
     await waitFor(() => c.evalJs("!!window.__magpieApi && __magpieApi.state.screen === 'setup'"), "setup screen");
 
     check("boot: landing present on web", (await c.evalJs("document.querySelectorAll('.web-only').length")) > 0);
+    check("web: in-app author credit stays hidden (the web footer already has one)", await c.evalJs("document.getElementById('about-site').hidden"));
 
     // ------------------------------------------------------------ setup
     await c.evalJs(`(() => {
