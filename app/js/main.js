@@ -683,6 +683,7 @@ async function boot() {
   }
   const ver = $("ver");
   if (ver) ver.textContent = `v${VERSION}${isWrapper() ? ` · app ${wrapperVersion()}` : ""}`;
+  $("ver-app").textContent = `Magpie v${VERSION}`;
 
   wireEvents();
 

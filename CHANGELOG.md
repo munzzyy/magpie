@@ -10,6 +10,8 @@
 - On a phone, the timeline's top bar no longer runs off the screen: the
   chain badge gets its own line under the title, and the lock button is
   back in view.
+- Settings ends with the app version and the "Made by Munzzyy" credit, so
+  both stay in reach after setup, on the web and in the app.
 
 ## 0.4.3
 

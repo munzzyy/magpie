@@ -144,6 +144,20 @@ async function main() {
     await c.evalJs("document.getElementById('btn-export-back').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "back on the timeline");
 
+    // No target: a main-frame https tap is what shouldOverrideUrlLoading hands to the browser.
+    await c.evalJs("document.querySelector('#screen-timeline details.danger').open = true; 'ok'");
+    const about = await c.evalJs(`(() => {
+      const a = document.querySelector('#about-app a');
+      const r = a.getBoundingClientRect();
+      return { href: a.href, target: a.getAttribute('target'), shown: r.width > 0 && r.height > 0 };
+    })()`);
+    check(
+      "wrapper: Settings carries the author credit, linked to the profile",
+      about.href === "https://github.com/munzzyy" && about.target === null && about.shown,
+      JSON.stringify(about),
+    );
+    await c.evalJs("document.querySelector('#screen-timeline details.danger').open = false; 'ok'");
+
     const TOPBAR_FIT = `(() => {
       const vw = document.documentElement.clientWidth;
       const kids = [...document.querySelector('#screen-timeline .topbar').children];

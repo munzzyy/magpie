@@ -136,6 +136,10 @@ async function main() {
 
     check("boot: landing present on web", (await c.evalJs("document.querySelectorAll('.web-only').length")) > 0);
     check("web: in-app author credit stays hidden (the web footer already has one)", await c.evalJs("document.getElementById('about-site').hidden"));
+    check(
+      "web: Settings carries the author credit too, for anyone past setup",
+      (await c.evalJs("document.querySelector('#screen-timeline details.danger #about-app a').href")) === "https://github.com/munzzyy",
+    );
 
     // ------------------------------------------------------------ setup
     await c.evalJs(`(() => {
