@@ -65,6 +65,12 @@ export function t(text, vars) {
   return out;
 }
 
+// English and Spanish take the singular for exactly one; a locale with more
+// plural forms needs more than this.
+export function tn(count, one, other, vars) {
+  return t(count === 1 ? one : other, { ...vars, count });
+}
+
 export function translateDom(root) {
   const scope = root || globalThis.document;
   if (!scope?.querySelectorAll) return;

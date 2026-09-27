@@ -6,7 +6,7 @@ import * as vault from "./vault.js";
 import { buildExport } from "./export.js";
 import { isWrapper, wrapperVersion, shareOut, saveOut, canCapture, capturePhoto, onCaptured, sharedTokens, onShared, ExportUnavailableError } from "./platform.js";
 import { isBundled } from "./env.js";
-import { setLocale, resolveLocale, translateDom, t, LOCALE_CHOICES } from "./i18n.js";
+import { setLocale, resolveLocale, translateDom, t, tn, LOCALE_CHOICES } from "./i18n.js";
 
 const VERSION = "0.4.3";
 
@@ -192,11 +192,12 @@ async function refreshBadge(count) {
   // if it ever slows down, the Verify button stays the source of truth.
   const res = await vault.verify();
   badge.className = `chain-badge ${res.ok ? "ok" : "bad"}`;
+  // A time warning needs two entries, so those strings never take the singular.
   badge.textContent = !res.ok
     ? t("CHAIN BROKEN at entry {seq}", { seq: res.badSeq ?? "?" })
     : res.timeWarning
       ? t("{count} entries, chain intact (entry {seq}'s time is earlier than the one before it)", { count, seq: res.timeWarning })
-      : t("{count} entries, chain intact", { count });
+      : tn(count, "{count} entry, chain intact", "{count} entries, chain intact");
 }
 
 async function openEntry(entry, hash) {
@@ -526,7 +527,7 @@ function wireEvents() {
               count: res.count,
               seq: res.timeWarning,
             })
-          : t("Chain intact: {count} entries verify.", { count: res.count }),
+          : tn(res.count, "Chain intact: {count} entry verifies.", "Chain intact: {count} entries verify."),
       6000,
     );
     await refreshBadge(res.count);

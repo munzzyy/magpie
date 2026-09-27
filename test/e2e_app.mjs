@@ -159,7 +159,12 @@ async function main() {
       document.getElementById("add-form").requestSubmit();
     })()`);
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 1"), "entry 1 chained");
-    check("chain badge shows intact after entry 1", /chain intact/.test(await c.evalJs("document.getElementById('chain-badge').textContent")));
+    const badgeSays = (want) =>
+      waitFor(() => c.evalJs(`document.getElementById('chain-badge').textContent === ${JSON.stringify(want)}`), want).then(
+        () => true,
+        () => false,
+      );
+    check("chain badge says 1 entry, singular", await badgeSays("1 entry, chain intact"));
     check("chain spine: entry has a dot and a hash chip", await c.evalJs(
       "!!document.querySelector('#timeline li .tl-dot') && !!document.querySelector('#timeline li .tl-hash')",
     ));
@@ -187,6 +192,7 @@ async function main() {
       document.getElementById("add-form").requestSubmit();
     })()`);
     await waitFor(() => c.evalJs("document.querySelectorAll('#timeline li').length === 2"), "entry 2 chained");
+    check("chain badge says 2 entries, plural", await badgeSays("2 entries, chain intact"));
 
     // ------------------------------------------------------ entry view
     await c.evalJs("document.querySelectorAll('#timeline li button')[1].click(); 'ok'");

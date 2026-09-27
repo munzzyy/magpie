@@ -1,6 +1,7 @@
 // Lists every translatable English source string: data-i18n texts and
-// attributes from the HTML, plus t("...") calls in the JS. Compares against
-// the Spanish catalog and prints what is missing or stale.
+// attributes from the HTML, plus t("...") and tn(n, "...", "...") calls in
+// the JS. Compares against the Spanish catalog and prints what is missing or
+// stale.
 //
 // Run from the repo root:  node tools/extract-strings.mjs
 
@@ -42,12 +43,21 @@ for (const m of html.matchAll(/<[a-z0-9]+ [^>]*data-i18n-attr="([^"]+)"[^>]*>/gi
 }
 
 const jsDir = path.join(ROOT, "app", "js");
+const unparsed = [];
 for (const file of readdirSync(jsDir)) {
   if (!file.endsWith(".js") || file === "strings-es.js") continue;
   const src = readFileSync(path.join(jsDir, file), "utf8");
   for (const m of src.matchAll(/\bt\(\s*"((?:[^"\\]|\\.)*)"/g)) {
     strings.add(norm(m[1].replace(/\\"/g, '"')));
   }
+  const counted = [...src.matchAll(/\btn\(\s*[^,"()]+,\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"/g)];
+  for (const m of counted) {
+    strings.add(norm(m[1].replace(/\\"/g, '"')));
+    strings.add(norm(m[2].replace(/\\"/g, '"')));
+  }
+  const code = src.replace(/^\s*\/\/.*$/gm, "");
+  const calls = [...code.matchAll(/(?<!function )\btn\(/g)].length;
+  if (calls !== counted.length) unparsed.push(`${file}: ${calls - counted.length} tn() call(s) without two literal templates`);
 }
 
 const { es } = await import(path.join(ROOT, "app", "js", "strings-es.js"));
@@ -63,5 +73,9 @@ if (stale.length) {
   console.log(`\nstale in es (${stale.length}):`);
   for (const s of stale.sort()) console.log(`  ${JSON.stringify(s)}`);
 }
-if (!missing.length && !stale.length) console.log("es catalog complete");
-process.exit(missing.length ? 1 : 0);
+if (unparsed.length) {
+  console.log("\ncounted strings the extractor could not read:");
+  for (const s of unparsed) console.log(`  ${s}`);
+}
+if (!missing.length && !stale.length && !unparsed.length) console.log("es catalog complete");
+process.exit(missing.length || unparsed.length ? 1 : 0);
