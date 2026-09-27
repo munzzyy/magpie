@@ -168,12 +168,22 @@ button { background: none; border: none; cursor: pointer; }
   min-height: 44px;
 }
 
-.topbar { display: flex; align-items: center; gap: 8px; padding: 4px 0 12px; }
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 4px 0 12px; }
 .topbar h1 { margin: 0; font-size: 1.125rem; font-weight: 700; }
 .top-space { flex: 1; }
+.topbar #btn-lock { margin-left: auto; }
 .chain-badge { font-size: 0.8125rem; font-weight: 700; border-radius: 999px; padding: 3px 10px; }
+.chain-badge:empty { padding: 0; }
 .chain-badge.ok { background: var(--ok-bg); color: var(--ok); }
 .chain-badge.bad { background: var(--warn-bg); color: var(--warn); }
+
+/* Badge on its own row so the buttons fit one row down to 360px in Spanish. */
+@media (max-width: 560px) {
+  #screen-timeline .topbar { column-gap: 6px; row-gap: 4px; }
+  #screen-timeline .topbar::after { content: ""; order: 1; flex-basis: 100%; }
+  .topbar .chain-badge { order: 2; }
+  .topbar .btn-ghost { padding-left: 12px; padding-right: 12px; }
+}
 
 /* The chain spine: a dashed line down the left edge of the timeline, with
    one dot per entry, so the app looks like what it claims to be. */

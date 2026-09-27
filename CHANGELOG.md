@@ -7,6 +7,9 @@
   just the website), plus FUNDING.yml and an F-Droid author link.
 - A journal with one entry says "1 entry, chain intact" instead of "1
   entries", in English and Spanish, and so does the Verify message.
+- On a phone, the timeline's top bar no longer runs off the screen: the
+  chain badge gets its own line under the title, and the lock button is
+  back in view.
 
 ## 0.4.3
 

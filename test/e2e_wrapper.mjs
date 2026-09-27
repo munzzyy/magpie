@@ -141,6 +141,36 @@ async function main() {
     const out = await c.evalJs("window.__shared");
     check("share-out: zip reaches the bridge", out.size > 1000 && out.mime === "application/zip" && /^magpie-export-[a-z2-9]{4}\.zip$/.test(out.name), JSON.stringify(out));
 
+    await c.evalJs("document.getElementById('btn-export-back').click(); 'ok'");
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "back on the timeline");
+
+    const TOPBAR_FIT = `(() => {
+      const vw = document.documentElement.clientWidth;
+      const kids = [...document.querySelector('#screen-timeline .topbar').children];
+      const out = kids.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && (r.left < 0 || r.right > vw); }).map((e) => e.id || e.tagName);
+      const mids = ['btn-verify', 'btn-export', 'btn-lock'].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.top + r.height / 2; });
+      const badge = document.getElementById('chain-badge');
+      const cs = getComputedStyle(badge);
+      const lines = Math.round((badge.getBoundingClientRect().height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)) / parseFloat(cs.lineHeight));
+      return { vw, sw: document.documentElement.scrollWidth, out, buttonsOneRow: Math.max(...mids) - Math.min(...mids) < 4, badgeLines: lines, verify: document.getElementById('btn-verify').textContent };
+    })()`;
+    const fitAt = async (width, verifyLabel) => {
+      await c.send("Emulation.setDeviceMetricsOverride", { width, height: 844, deviceScaleFactor: 1, mobile: true });
+      await sleep(250);
+      const m = await c.evalJs(TOPBAR_FIT);
+      check(
+        `layout: timeline topbar fits at ${width}px ("${verifyLabel}")`,
+        m.verify === verifyLabel && m.sw <= m.vw && m.out.length === 0 && m.buttonsOneRow && m.badgeLines === 1,
+        JSON.stringify(m),
+      );
+    };
+    await fitAt(390, "Verify");
+    await fitAt(360, "Verify");
+    // Spanish has the widest button labels.
+    await c.evalJs(`(() => { const p = document.getElementById('locale-pick'); p.value = 'es'; p.dispatchEvent(new Event('change')); })()`);
+    await fitAt(390, "Verificar");
+    await fitAt(360, "Verificar");
+
     const errs = await c.evalJs("(__magpieErrors || []).slice(0, 5)");
     check("console clean", errs.length === 0, JSON.stringify(errs));
     c.close();
