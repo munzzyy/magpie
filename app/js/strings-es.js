@@ -149,4 +149,5 @@ export const es = {
   "Sealed backup downloaded. It is safe to park anywhere; only your passphrase opens it.":
     "Copia sellada descargada. Es segura para guardar donde sea; solo tu frase la abre.",
   "Choose where to save your sealed backup.": "Elige dónde guardar tu copia sellada.",
+  "Made by": "Hecho por",
 };

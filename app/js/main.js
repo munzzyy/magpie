@@ -676,6 +676,7 @@ async function boot() {
   if (isBundled()) {
     for (const node of document.querySelectorAll(".web-only")) node.remove();
     $("btn-camera").hidden = !(isWrapper() && canCapture());
+    $("about-site").hidden = false;
   } else if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }

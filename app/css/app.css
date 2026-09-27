@@ -157,6 +157,8 @@ button { background: none; border: none; cursor: pointer; }
 .apk-row { margin: 14px 0 4px; }
 .land-footer { display: flex; gap: 18px; padding: 16px 0 4px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 0.875rem; }
 .land-footer a { color: var(--accent); }
+.about-line { text-align: center; margin-top: 30px; color: var(--ink-soft); font-size: 0.875rem; }
+.about-line a { color: var(--accent); }
 .locale-line { text-align: center; margin-top: 24px; }
 .locale-line select {
   background: var(--card);
