@@ -3,6 +3,8 @@
 ## Unreleased
 
 - License moved from MIT to GPL-3.0-or-later.
+- Added a "Made by Munzzyy" credit, visible inside the app itself (not
+  just the website), plus FUNDING.yml and an F-Droid author link.
 
 ## 0.4.3
 
