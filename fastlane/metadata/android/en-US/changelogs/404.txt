@@ -1,0 +1,1 @@
+A journal with one entry now says "1 entry", the top bar fits on a phone screen, and Settings shows the version and who made the app. Magpie is now GPL-3.0-or-later.

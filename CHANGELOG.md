@@ -1,17 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.4.4
 
-- License moved from MIT to GPL-3.0-or-later.
-- Added a "Made by Munzzyy" credit, visible inside the app itself (not
-  just the website), plus FUNDING.yml and an F-Droid author link.
+One entry reads as one entry, the top bar fits a phone, and Settings says who
+made the app.
+
 - A journal with one entry says "1 entry, chain intact" instead of "1
   entries", in English and Spanish, and so does the Verify message.
 - On a phone, the timeline's top bar no longer runs off the screen: the
   chain badge gets its own line under the title, and the lock button is
   back in view.
-- Settings ends with the app version and the "Made by Munzzyy" credit, so
-  both stay in reach after setup, on the web and in the app.
+- Settings ends with the app version and a "Made by Munzzyy" credit linking
+  to the author's GitHub, so both stay in reach after setup, in the app and
+  on the web.
+- License moved from MIT to GPL-3.0-or-later. 0.4.3 and earlier stay MIT.
+- The F-Droid listing gets store screenshots, an author link and a Donate
+  link.
 
 ## 0.4.3
 
