@@ -105,3 +105,11 @@ built yet. Until it is, verifying the APK against this source means reading
 the source and building it yourself.
 
 [GPL-3.0-or-later](LICENSE). You can use, study, change and share it. If you distribute a copy or a modified version, it has to stay under the GPL and come with its source. Releases up to v0.4.3 were under MIT.
+
+## Support
+
+If you want to help keep Magpie going, you can sponsor on [GitHub Sponsors](https://github.com/sponsors/munzzyy) or send Monero to:
+
+```
+8AHCWFiXhAobJdEUYgPh9y6ZgAttnk4YRGMUrpuiNbSLMG8Hmoy2Z76JPeCkJEBcudFVfX6UHa69JYLxBVfAwsjmFoUo1Rr
+```
