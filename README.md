@@ -111,5 +111,5 @@ the source and building it yourself.
 If you want to help keep Magpie going, you can sponsor on [GitHub Sponsors](https://github.com/sponsors/munzzyy) or send Monero to:
 
 ```
-8AHCWFiXhAobJdEUYgPh9y6ZgAttnk4YRGMUrpuiNbSLMG8Hmoy2Z76JPeCkJEBcudFVfX6UHa69JYLxBVfAwsjmFoUo1Rr
+8BApLkfsBS39oNXz4L1qCmZ7f5zKVRr1qLJgrHddRZb4JRcnjDkcKdk7wW7uThCeV9CuLn8o7gAn8d6vFeWNiyeXSmrRUSq
 ```
