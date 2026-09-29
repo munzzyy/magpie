@@ -3,6 +3,7 @@
 [![release](https://img.shields.io/github/v/release/munzzyy/magpie)](https://github.com/munzzyy/magpie/releases/latest) [![ci](https://github.com/munzzyy/magpie/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/magpie/actions/workflows/ci.yml) [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-17697a)](LICENSE)
 
 [<img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/io.github.munzzyy.magpie/)
+[<img src="https://munzzyy.github.io/tern/badge.png" alt="Get it with Tern" height="80">](https://munzzyy.github.io/tern/add/?url=https%3A%2F%2Fgithub.com%2Fmunzzyy%2Fmagpie)
 
 A journal that can prove itself.
 
@@ -37,7 +38,7 @@ on Android 10 or newer. Magpie is not in the Play Store yet, so Android
 will warn you about installing from outside it; that warning is expected
 for any app distributed this way, not a sign something is wrong. The link
 always points at the current release, so a release-tracking installer
-(e.g. [Obtainium](https://github.com/ImranR98/Obtainium)) can update it
+(e.g. [Tern](https://github.com/munzzyy/tern)) can update it
 automatically without going through a store.
 
 On the web it is a static page with no server side at all: run
