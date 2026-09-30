@@ -1,0 +1,1 @@
+The app no longer draws under the status bar, the camera cutout or the navigation bar on Android 15 and later.
