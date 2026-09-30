@@ -103,9 +103,8 @@ touches `ios/Sources` or the parts of `app/` it depends on.
 Safari on iOS can install the web app directly from wherever it is hosted:
 open the site, tap Share, then "Add to Home Screen". That copy runs offline
 after the first load (over https only) and gets updates from the site when
-you are online. As of this writing Magpie has no hosted copy of `app/`, so
-this path is not usable yet; the wrapper above is the only way to run Magpie
-on an iPhone today. Once a hosted copy exists: the installed icon and a
+you are online. The hosted copy is
+[magpie.munzzyy.dev](https://magpie.munzzyy.dev). The installed icon and a
 Safari tab pointed at the same URL get separate storage containers, so a
 journal started in one will not appear in the other, and deleting the
 Home Screen icon deletes that copy's journal the same way uninstalling the

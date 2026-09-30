@@ -3,7 +3,7 @@
 [![release](https://img.shields.io/github/v/release/munzzyy/magpie)](https://github.com/munzzyy/magpie/releases/latest) [![ci](https://github.com/munzzyy/magpie/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/magpie/actions/workflows/ci.yml) [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-17697a)](LICENSE)
 
 [<img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/io.github.munzzyy.magpie/)
-[<img src="https://munzzyy.github.io/tern/badge.png" alt="Get it with Tern" height="80">](https://munzzyy.github.io/tern/add/?url=https%3A%2F%2Fgithub.com%2Fmunzzyy%2Fmagpie)
+[<img src="https://tern.munzzyy.dev/badge.png" alt="Get it with Tern" height="80">](https://tern.munzzyy.dev/add/?url=https%3A%2F%2Fgithub.com%2Fmunzzyy%2Fmagpie)
 
 A journal that can prove itself.
 
@@ -41,19 +41,20 @@ always points at the current release, so a release-tracking installer
 (e.g. [Tern](https://github.com/munzzyy/tern)) can update it
 automatically without going through a store.
 
-On the web it is a static page with no server side at all: run
-`node test/serve_local.mjs` and open it locally, or serve `app/` from
-anywhere that serves plain files. There is no hosted copy today, so that is
-the only way to run the web version until one exists.
+On the web it is a static page with no server side at all. Open
+[magpie.munzzyy.dev](https://magpie.munzzyy.dev), which is this repo's `app/`
+served as plain files, or run your own copy: `node test/serve_local.mjs`
+serves it locally, or serve `app/` from anywhere that serves plain files.
 
 ## iOS
 
 There is a native wrapper too: the same `app/` in a WKWebView, no server,
 nothing it can reach out to. It is not on the App Store, so building it
 means Xcode and your own signing, which is real friction for a phone owner
-who is not a developer; there is no shortcut around that today, since the
-web version above has no hosted copy either. Details, including the
-Xcode steps, in [docs/IOS.md](docs/IOS.md).
+who is not a developer. The shortcut is the web version: open
+[magpie.munzzyy.dev](https://magpie.munzzyy.dev) in Safari, tap Share, then
+"Add to Home Screen". Details, including the Xcode steps and how the two
+differ, in [docs/IOS.md](docs/IOS.md).
 
 ## Check the claims
 
