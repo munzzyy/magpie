@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- On Android 15 and later the app no longer draws under the status bar, the
+  camera cutout or the navigation bar.
+
 ## 0.4.4
 
 One entry reads as one entry, the top bar fits a phone, and Settings says who
