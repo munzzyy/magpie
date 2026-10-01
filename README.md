@@ -69,12 +69,17 @@ differ, in [docs/IOS.md](docs/IOS.md).
 ## Check the claims
 
 To check an export, unzip it and run `python3 verify.py` in the folder
-(`py verify.py` on Windows). It needs Python and nothing else. One catch on
-Windows with Python 3.14 or older: the verify.py inside exports from Magpie
-0.5.1 and earlier reads the files in Windows' default text encoding, so a
-single accented letter makes a genuine export look tampered with. Run those
-as `py -X utf8 verify.py`. Newer exports carry a verify.py that doesn't
-need it.
+(`py verify.py` on Windows). It needs Python and nothing else. If the head
+hash went out earlier, in an email or a text, `python3 verify.py --anchor
+<that hash>` checks a later export against it: it names the entry the hash
+was the head after, or fails if the hash never belonged to this journal.
+
+Exports from Magpie 0.5.1 and earlier carry an older verify.py. It has no
+`--anchor`, and on Windows with Python 3.14 or older it reads the files in
+the wrong text encoding, so a single accented letter makes a genuine export
+look tampered with. Run those as `py -X utf8 verify.py`, or copy in the
+verify.py from a newer export; the export format hasn't changed, so it
+checks old exports too.
 
 `npm test` runs the chain, crypto, service-worker, and zip suites; the
 zip suite cross-checks against python3 and system unzip, so have both

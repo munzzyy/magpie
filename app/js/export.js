@@ -21,7 +21,8 @@ export const VERIFY_PY = `#!/usr/bin/env python3
 # every attachment digest. Needs only the Python standard library.
 #   python3 verify.py
 #   python3 verify.py --extends /path/to/an/earlier/export
-import argparse, hashlib, json, os, sys
+#   python3 verify.py --anchor HEAD_HASH_SHARED_EARLIER
+import argparse, hashlib, json, os, re, sys
 
 KEYS = ["v", "seq", "ts", "type", "title", "note", "file"]
 FILE_KEYS = ["name", "mime", "size", "sha256"]
@@ -40,15 +41,15 @@ def load(base):
     entries = json.load(open(os.path.join(base, "entries.json"), encoding="utf-8"))
     return manifest, entries
 
-def verify_chain(base, manifest, entries, want_head_at=None):
-    # Recomputes the chain from scratch. If want_head_at is given, also
-    # returns the head hash after exactly that many entries, so a shorter
-    # export's recorded head can be matched against a prefix of a longer one.
-    # warn_seq is the first entry whose ts is earlier than the entry before
-    # it: the chain proves insertion order, not clock order, so this is a
-    # warning, never a failure. Clocks drift and phones change time zones.
+def verify_chain(base, manifest, entries):
+    # Recomputes the chain from scratch. heads[i] is the head after entry
+    # i + 1, so a shorter export's head, or one shared earlier, can be found
+    # in a longer one. warn_seq is the first entry whose ts is earlier than
+    # the entry before it: the chain proves insertion order, not clock order,
+    # so this is a warning, never a failure. Clocks drift and phones change
+    # time zones.
     prev = manifest["genesis"]
-    prefix_head = None
+    heads = []
     prev_ts = None
     warn_seq = None
     for i, e in enumerate(entries):
@@ -56,6 +57,7 @@ def verify_chain(base, manifest, entries, want_head_at=None):
             return False, f"entry {i} has seq {e['seq']}", None, None
         h = hashlib.sha256((prev + "\\n" + canonical(e)).encode()).hexdigest()
         prev = h
+        heads.append(h)
         if e.get("file"):
             path = os.path.join(base, "files", f"{e['seq']:03d}-" + e["_filename"])
             digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
@@ -64,20 +66,25 @@ def verify_chain(base, manifest, entries, want_head_at=None):
         if warn_seq is None and prev_ts is not None and e["ts"] < prev_ts:
             warn_seq = e["seq"]
         prev_ts = e["ts"]
-        if want_head_at is not None and i + 1 == want_head_at:
-            prefix_head = h
     if prev != manifest["head"]:
         return False, f"recomputed head {prev} != recorded head {manifest['head']}", None, None
-    return True, prev, prefix_head, warn_seq
+    return True, prev, heads, warn_seq
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--extends", metavar="DIR", help="an earlier export this one must append-only extend")
+    ap.add_argument("--anchor", metavar="HASH", action="append", default=[],
+                    help="a head hash shared earlier (repeatable): names the entry it was the head after")
     args = ap.parse_args()
+    anchors = []
+    for a in args.anchor:
+        if not re.fullmatch("[0-9a-fA-F]{64}", a):
+            ap.error(f"--anchor takes a full 64-character hex head hash, not {a!r}")
+        anchors.append(a.lower())
 
     base = os.path.dirname(os.path.abspath(__file__))
     manifest, entries = load(base)
-    ok, head_or_reason, _, warn_seq = verify_chain(base, manifest, entries)
+    ok, head_or_reason, heads, warn_seq = verify_chain(base, manifest, entries)
     if not ok:
         print("FAIL:", head_or_reason)
         sys.exit(1)
@@ -90,6 +97,19 @@ def main():
     print("existed in this exact state no LATER than the earliest moment the")
     print("head hash was shared with someone else.")
 
+    missed = False
+    for a in anchors:
+        if a in heads:
+            print(f"ANCHOR: {a} is the head after entry {heads.index(a) + 1} of {len(entries)}")
+        else:
+            print(f"FAIL: {a} is not the head of this journal after any entry")
+            missed = True
+    if missed:
+        sys.exit(1)
+    if anchors:
+        print("Each anchored entry, and every entry before it, existed exactly as it is")
+        print("here by the time that hash was shared.")
+
     if args.extends:
         older_manifest, older_entries = load(args.extends)
         if older_manifest.get("genesis") != manifest.get("genesis"):
@@ -99,10 +119,7 @@ def main():
         if older_count > len(entries):
             print("FAIL: the older export has more entries than this one; it cannot be a prefix")
             sys.exit(1)
-        ok2, head2, prefix_head, _ = verify_chain(base, manifest, entries, want_head_at=older_count)
-        if not ok2:
-            print("FAIL:", head2)
-            sys.exit(1)
+        prefix_head = heads[older_count - 1] if older_count else None
         if prefix_head != older_manifest["head"]:
             print("FAIL: this export does not extend", args.extends, "the chains diverge before entry", older_count)
             sys.exit(1)
@@ -132,6 +149,15 @@ at it and prove the newer export only ever appended to the older one,
 never edited or reordered it:
 
     python3 verify.py --extends /path/to/the/older/export
+
+If the head hash was shared earlier (emailed, texted, handed to a lawyer),
+check that this export carries on from the exact record it pinned:
+
+    python3 verify.py --anchor THE_HASH_THAT_WAS_SHARED
+
+It names the entry that hash was the head after. That entry and every one
+before it existed, exactly as they are here, by the time the hash was
+shared. A hash from a different or rewritten journal fails.
 
 What that means, honestly: a valid chain proves this log existed in
 exactly this state at whatever moment the head hash (in manifest.json)

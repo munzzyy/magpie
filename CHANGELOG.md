@@ -16,6 +16,10 @@
   second silently replaced the first. Its passphrase never opened it again.
   Creating or restoring a journal now refuses when one already exists and
   goes to the lock screen instead.
+- `python3 verify.py --anchor <hash>` checks an export against a head hash
+  shared earlier and names the entry it pinned, or fails if the hash never
+  belonged to this journal. Until now nothing in an export let someone
+  holding only the emailed hash check it.
 
 ## 0.5.1
 

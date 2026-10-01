@@ -184,6 +184,37 @@ test("verify.py --extends proves one export is an append-only extension of anoth
     // is catching genuine divergence, not just any old failure.
     const rivalOk = execFileSync("python3", [path.join(rival, "verify.py")], { encoding: "utf8" });
     assert.match(rivalOk, /^OK: 3 entries verify/);
+
+    // --anchor: a head hash emailed after entry 2 is found in the 4-entry export.
+    const anchor = (...hashes) =>
+      spawnSync("python3", [path.join(newer, "verify.py"), ...hashes.flatMap((h) => ["--anchor", h])], { encoding: "utf8" });
+    const at2 = anchor(chain[1].head);
+    assert.equal(at2.status, 0, at2.stdout + at2.stderr);
+    assert.match(at2.stdout, new RegExp(`^ANCHOR: ${chain[1].head} is the head after entry 2 of 4$`, "m"));
+    const at4 = anchor(chain[3].head);
+    assert.equal(at4.status, 0);
+    assert.match(at4.stdout, /after entry 4 of 4/);
+    const upper = anchor(chain[1].head.toUpperCase());
+    assert.equal(upper.status, 0);
+    assert.match(upper.stdout, /after entry 2 of 4/);
+    const both = anchor(chain[0].head, chain[2].head);
+    assert.equal(both.status, 0);
+    assert.match(both.stdout, /after entry 1 of 4[\s\S]*after entry 3 of 4/);
+
+    // Negative controls: the fork's head, the genesis string and a bare prefix are no anchors.
+    const forked = anchor(rivalPrev);
+    assert.equal(forked.status, 1);
+    assert.match(forked.stdout, /^FAIL: .* is not the head/m);
+    assert.doesNotMatch(forked.stdout, /^ANCHOR:/m);
+    const mixed = anchor(chain[1].head, rivalPrev);
+    assert.equal(mixed.status, 1);
+    assert.match(mixed.stdout, /^ANCHOR: .* entry 2 of 4$/m);
+    assert.match(mixed.stdout, /^FAIL: .* is not the head/m);
+    for (const notAHash of [GENESIS, chain[1].head.slice(0, 16)]) {
+      const r = anchor(notAHash);
+      assert.equal(r.status, 2, notAHash);
+      assert.doesNotMatch(r.stdout, /^(ANCHOR|OK):/m);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

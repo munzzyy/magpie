@@ -56,6 +56,16 @@ extends the same chain inherits that anchor. Magpie puts the head hash
 one tap from the export screen because this step is the difference
 between a diary and evidence.
 
+Anyone holding that hash can check a later export against it without
+Magpie:
+
+    python3 verify.py --anchor <the hash that was shared>
+
+It prints the entry the hash was the head after. That entry and everything
+before it existed unchanged by the time the hash left your hands. A hash
+that was never this journal's head fails, whether it came from a rebuilt
+journal or a rewritten one.
+
 ## What it does NOT protect you from
 
 Legal weight is not automatic, and Magpie never says "court-ready".
