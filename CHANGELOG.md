@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+Magpie has an icon of its own.
+
+- The icon is now two linked chain links, for the hash chain. The old paper card looked
+  too much like Sepia's and Blot's.
+
 ## 0.5.0
 
 Magpie runs on Android 9.
