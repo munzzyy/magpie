@@ -24,3 +24,8 @@ Límites honestos: que algo sea a prueba de manipulación no lo hace
 admisible en un tribunal por sí solo, las marcas de tiempo del
 dispositivo son afirmaciones hasta que se anclan, y no hay recuperación
 de la frase de acceso, a propósito.
+
+Funciona en Android 9 o posterior, con Android System WebView 84 o
+posterior. Android 9 no recibe correcciones de seguridad desde enero de
+2022, así que en un teléfono tan antiguo Magpie funciona, pero el teléfono
+es más fácil de atacar.

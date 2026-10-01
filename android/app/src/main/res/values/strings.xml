@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Magpie</string>
+    <string name="app_name" translatable="false">Magpie</string>
     <string name="saved_to_downloads">Saved to Downloads</string>
     <string name="save_failed">Could not save the file</string>
+    <string name="webview_title">Update Android System WebView</string>
+    <string name="webview_too_old">Magpie runs inside Android System WebView and needs version %1$d or newer. This phone has version %2$d.\n\nUpdate Android System WebView (on some phones it comes with Chrome) from your app store, or install your phone\'s latest system update, then open Magpie again.</string>
+    <string name="webview_missing">Magpie runs inside Android System WebView, and this phone doesn\'t have a working one. It may be turned off in your phone\'s app settings, or it may need an update from your app store.</string>
+    <string name="android9_title">This phone runs Android 9</string>
+    <string name="android9_body">Google\'s last security fixes for Android 9 came out in January 2022. Magpie works here, but holes in Android found since then stay open on this phone. Your journal is encrypted while it\'s locked, but while it\'s open, anything that has broken into the phone could read it.\n\nIf you can, keep your journal on a newer phone.</string>
+    <string name="saved">Saved</string>
 </resources>

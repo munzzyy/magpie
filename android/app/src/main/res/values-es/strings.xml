@@ -2,4 +2,10 @@
 <resources>
     <string name="saved_to_downloads">Guardado en Descargas</string>
     <string name="save_failed">No se pudo guardar el archivo</string>
+    <string name="webview_title">Actualiza Android System WebView</string>
+    <string name="webview_too_old">Magpie funciona dentro de Android System WebView y necesita la versión %1$d o posterior. Este teléfono tiene la versión %2$d.\n\nActualiza Android System WebView (en algunos teléfonos viene con Chrome) desde tu tienda de aplicaciones o instala la última actualización del sistema, y vuelve a abrir Magpie.</string>
+    <string name="webview_missing">Magpie funciona dentro de Android System WebView y este teléfono no tiene uno que funcione. Puede estar desactivado en los ajustes de aplicaciones del teléfono o necesitar una actualización desde tu tienda de aplicaciones.</string>
+    <string name="android9_title">Este teléfono usa Android 9</string>
+    <string name="android9_body">Las últimas correcciones de seguridad de Google para Android 9 salieron en enero de 2022. Magpie funciona aquí, pero los fallos de Android descubiertos desde entonces siguen abiertos en este teléfono. Tu diario está cifrado mientras está bloqueado, pero mientras está abierto, cualquier cosa que haya entrado en el teléfono podría leerlo.\n\nSi puedes, guarda tu diario en un teléfono más nuevo.</string>
+    <string name="saved">Guardado</string>
 </resources>

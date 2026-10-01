@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.munzzyy.magpie"
-        minSdk = 29
+        minSdk = 28
         targetSdk = 36
         versionCode = 405
         versionName = "0.4.5"

@@ -19,3 +19,7 @@ no analytics, no dependencies. GPL-3.0-or-later licensed.
 Honest limits: tamper-evident is not court-admissible by itself, device
 timestamps are claims until anchored, and there is no passphrase
 recovery on purpose.
+
+Runs on Android 9 and newer, with Android System WebView 84 or newer.
+Android 9 has had no security fixes since January 2022, so on a phone that
+old Magpie works, but the phone itself is easier to break into.

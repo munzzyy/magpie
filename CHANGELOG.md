@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Magpie installs on Android 9 now. Exports there open the system save
+  picker, since Android 9 won't let an app write to Downloads without a
+  storage permission. The first time Magpie opens on Android 9 it says, once,
+  that Google stopped shipping security fixes for it after January 2022.
+- With an Android System WebView older than 84, the app shows which version
+  it needs instead of a blank page.
+
 ## 0.4.5
 
 Magpie stays clear of the status bar and the camera cutout.

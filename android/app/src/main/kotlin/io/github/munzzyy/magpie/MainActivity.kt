@@ -14,6 +14,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -70,6 +71,33 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    // Android 9 has no MediaStore write without a storage permission, so a save goes through the system picker there.
+    private var pendingSave: ByteArray? = null
+
+    private val createDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val bytes = pendingSave
+        pendingSave = null
+        val uri = result.data?.data
+        if (result.resultCode != RESULT_OK || uri == null || bytes == null) return@registerForActivityResult
+        val ok = runCatching { contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null }.getOrDefault(false)
+        Toast.makeText(this, getString(if (ok) R.string.saved else R.string.save_failed), Toast.LENGTH_SHORT).show()
+    }
+
+    fun saveWithPicker(bytes: ByteArray, mime: String, name: String) {
+        pendingSave = bytes
+        val pick = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mime
+            putExtra(Intent.EXTRA_TITLE, name)
+        }
+        try {
+            createDocument.launch(pick)
+        } catch (e: ActivityNotFoundException) {
+            pendingSave = null
+            Toast.makeText(this, getString(R.string.save_failed), Toast.LENGTH_SHORT).show()
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +105,7 @@ class MainActivity : ComponentActivity() {
         // The screen holds an evidence journal; the app switcher must not
         // thumbnail it.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        if (SystemCheck.blockIfWebViewTooOld(this)) return
 
         webView = WebView(this)
         val root = FrameLayout(this)
@@ -167,10 +196,12 @@ class MainActivity : ComponentActivity() {
 
         takeShared(intent)
         webView.loadUrl(START_URL)
+        SystemCheck.noteAndroid9(this)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (!::webView.isInitialized) return
         val fresh = takeShared(intent)
         if (fresh.isNotEmpty()) {
             // Only the tokens THIS intent minted: replaying the whole queue

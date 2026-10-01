@@ -2,6 +2,7 @@ package io.github.munzzyy.magpie
 
 import android.content.ContentValues
 import android.content.Intent
+import android.os.Build
 import android.provider.MediaStore
 import android.util.Base64
 import android.webkit.JavascriptInterface
@@ -63,6 +64,10 @@ class MagpieBridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun saveFile(b64: String, mime: String, name: String) {
         val bytes = runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull() ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            activity.runOnUiThread { activity.saveWithPicker(bytes, mime, sanitize(name)) }
+            return
+        }
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, sanitize(name))
             put(MediaStore.Downloads.MIME_TYPE, mime)

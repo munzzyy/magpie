@@ -34,12 +34,22 @@ this state.
 ## Get it
 
 Android: install [magpie.apk](https://github.com/munzzyy/magpie/releases/latest/download/magpie.apk)
-on Android 10 or newer. Magpie is not in the Play Store yet, so Android
+on Android 9 or newer. Magpie is not in the Play Store yet, so Android
 will warn you about installing from outside it; that warning is expected
 for any app distributed this way, not a sign something is wrong. The link
 always points at the current release, so a release-tracking installer
 (e.g. [Tern](https://github.com/munzzyy/tern)) can update it
 automatically without going through a store.
+
+On Android 9 it works, but know two things. Google stopped shipping
+security fixes for Android 9 after January 2022, so a phone that old is
+easier to break into. Your journal is encrypted while it's locked, but while
+it's open, anything that has broken in could read it. Magpie tells you this
+once, the first time it opens on Android 9. It also needs Android System
+WebView 84 or newer. Phones that update through Google Play should have that
+already, and on an older one Magpie shows how to update it rather than a
+blank screen. Exports on Android 9 open the system save picker, since an app
+can't write to Downloads there without a storage permission.
 
 On the web it is a static page with no server side at all. Open
 [magpie.munzzyy.dev](https://magpie.munzzyy.dev), which is this repo's `app/`
