@@ -104,17 +104,28 @@ export const headState = () => {
   return { head, count };
 };
 
+// add(), not put(), for the KDF record: a second tab on the setup screen must not replace this journal.
 export async function setup(passphrase) {
   const salt = randomBytes(16);
   const k = await deriveKey(passphrase, salt, KDF_ITERS);
   const check = await sealText(k, CHECK_TEXT, "check");
-  await tx("meta", "readwrite", (s) => {
-    s.put({ salt, iters: KDF_ITERS, check }, "kdf");
-  });
+  const stateBox = await sealText(k, JSON.stringify({ head: GENESIS, count: 0 }), "state");
+  const d = await idb();
+  try {
+    await new Promise((resolve, reject) => {
+      const t = d.transaction("meta", "readwrite");
+      t.objectStore("meta").add({ salt, iters: KDF_ITERS, check }, "kdf");
+      t.objectStore("meta").put(stateBox, "state");
+      t.oncomplete = resolve;
+      t.onabort = () => reject(t.error);
+    });
+  } catch (err) {
+    if (err?.name === "ConstraintError") throw new RestoreBlockedError("already-set-up");
+    throw err;
+  }
   key = k;
   head = GENESIS;
   count = 0;
-  await saveState();
   // Best-effort: ask the browser not to evict this origin's storage under
   // pressure. A plain Safari tab and an installed Home Screen copy get
   // separate storage containers either way; this only changes eviction
@@ -151,14 +162,6 @@ export function lock() {
   key = null;
   head = GENESIS;
   count = 0;
-}
-
-async function saveState() {
-  guard();
-  const box = await sealText(key, JSON.stringify({ head, count }), "state");
-  await tx("meta", "readwrite", (s) => {
-    s.put(box, "state");
-  });
 }
 
 // The anchor record: proof that a export was actually handed off, and
@@ -484,18 +487,23 @@ export async function restoreBackup(bytes, passphrase) {
     }
   }
 
+  // add() again: another tab may have created a journal since the isSetUp() check above.
   const d = await idb();
-  await new Promise((resolve, reject) => {
-    const t = d.transaction(["meta", "entries", "files"], "readwrite");
-    t.objectStore("meta").put({ salt, iters: parsed.iters, check: boxIn(inner.kdf.check) }, "kdf");
-    t.objectStore("meta").put(boxIn(inner.state), "state");
-    if (inner.anchor) t.objectStore("meta").put(boxIn(inner.anchor), "anchor");
-    for (const e of inner.entries || []) t.objectStore("entries").put({ box: boxIn(e.box), hash: e.hash }, e.seq);
-    for (const f of inner.files || []) t.objectStore("files").put(boxIn(f.box), f.seq);
-    t.oncomplete = resolve;
-    t.onerror = () => reject(t.error);
-    t.onabort = () => reject(t.error);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const t = d.transaction(["meta", "entries", "files"], "readwrite");
+      t.objectStore("meta").add({ salt, iters: parsed.iters, check: boxIn(inner.kdf.check) }, "kdf");
+      t.objectStore("meta").put(boxIn(inner.state), "state");
+      if (inner.anchor) t.objectStore("meta").put(boxIn(inner.anchor), "anchor");
+      for (const e of inner.entries || []) t.objectStore("entries").put({ box: boxIn(e.box), hash: e.hash }, e.seq);
+      for (const f of inner.files || []) t.objectStore("files").put(boxIn(f.box), f.seq);
+      t.oncomplete = resolve;
+      t.onabort = () => reject(t.error);
+    });
+  } catch (err) {
+    if (err?.name === "ConstraintError") throw new RestoreBlockedError("already-set-up");
+    throw err;
+  }
 
   key = k;
   head = result.head;

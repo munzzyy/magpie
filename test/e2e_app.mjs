@@ -483,6 +483,25 @@ async function main() {
     await attemptRestore(hollowedFile, PASS);
     check("restore: a validly-resealed backup with its state box stripped cannot pass as an empty vault", (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
 
+    // ------------------- restore: a journal appears while it is running
+    // A journal created during the restore's KDF (planted here) must survive, and the restore write nothing.
+    const raced = await c.evalJs(
+      `(async () => {
+        const bytes = new TextEncoder().encode(${JSON.stringify(backupBytes.toString("utf8"))});
+        const outcome = __magpieApi.vault.restoreBackup(bytes, ${JSON.stringify(PASS)}).then(() => "restored", (e) => e.code || String(e));
+        const db = await new Promise((res, rej) => { const r = indexedDB.open("magpie"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+        await new Promise((res, rej) => { const t = db.transaction("meta", "readwrite"); t.objectStore("meta").put({ planted: true }, "kdf"); t.oncomplete = res; t.onabort = () => rej(t.error); });
+        const result = await outcome;
+        const after = await new Promise((res) => { const r = db.transaction(["meta", "entries"]).objectStore("meta").get("kdf"); r.onsuccess = () => res(r.result); });
+        const entries = await new Promise((res) => { const r = db.transaction("entries").objectStore("entries").count(); r.onsuccess = () => res(r.result); });
+        db.close();
+        return { result, planted: after?.planted === true, entries };
+      })()`,
+      true,
+    );
+    check("restore: a journal created mid-restore is not replaced", raced.result === "already-set-up" && raced.planted && raced.entries === 0, JSON.stringify(raced));
+    await c.evalJs("__magpieApi.vault.wipe()", true);
+
     // --------------------------------- restore: correct backup succeeds
     const { root: rootGood } = (await c.send("DOM.getDocument")).result;
     const goodInput = (await c.send("DOM.querySelector", { nodeId: rootGood.nodeId, selector: "#restore-file" })).result;
@@ -503,6 +522,50 @@ async function main() {
     const unexpected = errs.filter((e) => !/^restore: Error: (chain-invalid|wrong-passphrase|corrupt|not-a-backup)$/.test(e));
     check("no page errors across the whole run", unexpected.length === 0, JSON.stringify(errs));
     check("restore negative controls logged exactly the expected refusals", errs.length === 5, JSON.stringify(errs));
+
+    // ------------------------------------- two tabs on the setup screen
+    // Two tabs booted before any journal existed: the second setup must not replace the first.
+    const PASS_B = "a different passphrase entirely";
+    await c.evalJs("__magpieApi.vault.wipe()", true);
+    await c.send("Page.navigate", { url: BASE + "/" });
+    await waitFor(() => c.evalJs("!!window.__magpieApi && __magpieApi.state.screen === 'setup'"), "tab A on setup");
+    const tabB = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?about:blank`, { method: "PUT" })).json();
+    const b = connect(tabB.webSocketDebuggerUrl);
+    await b.open;
+    await b.send("Page.enable");
+    await b.send("Runtime.enable");
+    await b.send("Page.navigate", { url: BASE + "/" });
+    await waitFor(() => b.evalJs("!!window.__magpieApi && __magpieApi.state.screen === 'setup'"), "tab B on setup");
+    await c.evalJs(`(() => {
+      document.getElementById("setup-pass").value = ${JSON.stringify(PASS)};
+      document.getElementById("setup-pass2").value = ${JSON.stringify(PASS)};
+      document.getElementById("setup-form").requestSubmit();
+    })()`);
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "tab A set up");
+    await c.evalJs(`__magpieApi.vault.addEntry({ type: "note", title: "Written in tab A", note: "" })`, true);
+    await b.evalJs(`(() => {
+      document.getElementById("setup-pass").value = ${JSON.stringify(PASS_B)};
+      document.getElementById("setup-pass2").value = ${JSON.stringify(PASS_B)};
+      document.getElementById("setup-form").requestSubmit();
+    })()`);
+    const bScreen = await waitFor(
+      () => b.evalJs("['lock', 'timeline'].includes(__magpieApi.state.screen) && __magpieApi.state.screen"),
+      "tab B leaves setup",
+    );
+    check("two tabs: the second setup is refused and lands on the lock screen", bScreen === "lock", bScreen);
+    check(
+      "two tabs: and says a journal already exists",
+      (await b.evalJs("document.getElementById('toast').textContent")) === "A journal already exists on this device. Unlock it instead.",
+    );
+    check("two tabs: the refused setup leaves no passphrase in the form", (await b.evalJs("document.getElementById('setup-pass').value + document.getElementById('setup-pass2').value")) === "");
+    b.close();
+    await c.send("Page.navigate", { url: BASE + "/" });
+    await waitFor(() => c.evalJs("!!window.__magpieApi && __magpieApi.state.screen === 'lock'"), "tab A reloaded");
+    check("two tabs: tab A's own passphrase still opens its journal", (await c.evalJs(`__magpieApi.vault.unlock(${JSON.stringify(PASS)})`, true)) === true);
+    const twoTabVerify = await c.evalJs("__magpieApi.vault.verify()", true);
+    check("two tabs: tab A's entry is intact", twoTabVerify.ok === true && twoTabVerify.count === 1, JSON.stringify(twoTabVerify));
+    await c.evalJs("__magpieApi.vault.lock()");
+    check("two tabs: tab B's passphrase opens nothing", (await c.evalJs(`__magpieApi.vault.unlock(${JSON.stringify(PASS_B)})`, true)) === false);
     c.close();
   } finally {
     chromium.kill();

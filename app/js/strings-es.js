@@ -141,6 +141,8 @@ export const es = {
     "Todavía sin fijar. Exporta y comparte la cabeza de la cadena para fijar el registro.",
   "A journal already exists on this device. Delete it first, then restore.":
     "Ya existe un diario en este dispositivo. Bórralo primero y luego restaura.",
+  "A journal already exists on this device. Unlock it instead.":
+    "Ya existe un diario en este dispositivo. Desbloquéalo en su lugar.",
   "That file is not a Magpie sealed backup.": "Ese archivo no es una copia sellada de Magpie.",
   "That passphrase does not open this backup.": "Esa frase no abre esta copia.",
   "This backup is damaged and cannot be restored.": "Esta copia está dañada y no se puede restaurar.",

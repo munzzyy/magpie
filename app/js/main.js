@@ -419,7 +419,16 @@ function wireEvents() {
       toast(t("The two passphrases do not match."));
       return;
     }
-    await vault.setup(a);
+    try {
+      await vault.setup(a);
+    } catch (err) {
+      if (!(err instanceof vault.RestoreBlockedError)) throw err;
+      $("setup-pass").value = "";
+      $("setup-pass2").value = "";
+      show("lock");
+      toast(t("A journal already exists on this device. Unlock it instead."));
+      return;
+    }
     $("setup-pass").value = "";
     $("setup-pass2").value = "";
     await renderTimeline();

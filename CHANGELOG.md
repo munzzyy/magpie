@@ -11,6 +11,11 @@
   locked the moment the app was hidden, so a trip to the camera or the file
   picker came back to the lock screen. With nothing stored it waits the
   minute it shows now.
+- Two copies of the web app open on the setup screen at once, say an
+  installed one and a browser tab, could each create a journal, and the
+  second silently replaced the first. Its passphrase never opened it again.
+  Creating or restoring a journal now refuses when one already exists and
+  goes to the lock screen instead.
 
 ## 0.5.1
 
