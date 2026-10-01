@@ -27,13 +27,15 @@ createServer(async (req, res) => {
     if (file === "/") file = "/index.html";
     // Test stand-in for the wrapper's share hand-off origin path.
     if (file === "/shared/big") {
-      res.writeHead(413, "Payload Too Large", { "content-type": "video/mp4", "cache-control": "no-store" });
+      res.writeHead(413, "Payload Too Large", { "content-type": "video/mp4", "x-magpie-name": "kitchen%20leak.mp4", "cache-control": "no-store" });
       res.end();
       return;
     }
     if (file.startsWith("/shared/")) {
+      const names = { noname: null, badname: "%E0%A4%A", accented: "contrato%20d%C3%ADa%201.pdf" };
+      const name = file.slice("/shared/".length) in names ? names[file.slice("/shared/".length)] : "lease.pdf";
       const body = Buffer.alloc(2048, "shared-evidence-bytes ");
-      res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
+      res.writeHead(200, { "content-type": "application/pdf", "cache-control": "no-store", ...(name ? { "x-magpie-name": name } : {}) });
       res.end(body);
       return;
     }

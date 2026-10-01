@@ -274,7 +274,20 @@ async function saveEntry(ev) {
   }
 }
 
-const sharedName = (mime) => `shared.${mime.startsWith("image/") ? mime.split("/")[1].replace("jpeg", "jpg") : "bin"}`;
+const SHARED_EXT = { "application/pdf": "pdf", "video/mp4": "mp4", "audio/mpeg": "mp3", "audio/mp4": "m4a", "text/plain": "txt" };
+const sharedName = (mime) => {
+  const type = mime.split(";")[0].trim().toLowerCase();
+  return `shared.${type.startsWith("image/") ? type.split("/")[1].replace("jpeg", "jpg") : SHARED_EXT[type] || "bin"}`;
+};
+// The wrapper and the share-target worker send the original name percent-encoded.
+const nameHeader = (headers, mime) => {
+  try {
+    const raw = headers.get("x-magpie-name");
+    const name = raw ? decodeURIComponent(raw).trim() : "";
+    if (name) return name;
+  } catch {}
+  return sharedName(mime);
+};
 const tooBigText = (name) => t("{name} is too big to attach; the limit is {mb} MB.", { name, mb: MAX_ATTACH_MB });
 
 // Too big is decided before any body is read: the wrapper answers 413, a Blob knows its size.
@@ -282,7 +295,7 @@ async function readQueued(item) {
   if (typeof item === "string") {
     const res = await fetch(`/shared/${item}`);
     const mime = res.headers.get("content-type") || "application/octet-stream";
-    const name = sharedName(mime);
+    const name = nameHeader(res.headers, mime);
     if (res.status === 413 || Number(res.headers.get("content-length")) > MAX_ATTACH_BYTES) {
       res.body?.cancel().catch(() => {});
       return { tooBig: true, name };
@@ -759,7 +772,8 @@ async function boot() {
           if (res) {
             const mime = res.headers.get("content-type") || "application/octet-stream";
             // 413 is the worker's marker for a file over the cap; it parks no body.
-            pendingShared.push(res.status === 413 ? { mime } : { blob: await res.blob(), mime });
+            const name = nameHeader(res.headers, mime);
+            pendingShared.push(res.status === 413 ? { mime, name } : { blob: await res.blob(), mime, name });
           }
         }
         await cache.delete(req);

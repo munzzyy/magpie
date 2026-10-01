@@ -272,27 +272,33 @@ class MainActivity : ComponentActivity() {
         val (_, uri) = shared[idx]
         return runCatching {
             val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-            val size = sizeOf(uri)
+            val (name, size) = describe(uri)
+            val headers = if (name.isNullOrBlank()) emptyMap() else mapOf("X-Magpie-Name" to Uri.encode(name))
             if (size != null && size > MAX_ATTACH_BYTES) {
                 shared.removeAt(idx)
                 dropCapture(uri)
-                return WebResourceResponse(mime, null, 413, "Payload Too Large", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                return WebResourceResponse(mime, null, 413, "Payload Too Large", headers, ByteArrayInputStream(ByteArray(0)))
             }
             val input = contentResolver.openInputStream(uri) ?: return null
             shared.removeAt(idx)
-            WebResourceResponse(mime, null, CappedStream(input, MAX_ATTACH_BYTES + 1) { dropCapture(uri) })
+            WebResourceResponse(mime, null, 200, "OK", headers, CappedStream(input, MAX_ATTACH_BYTES + 1) { dropCapture(uri) })
         }.getOrNull()
     }
 
-    private fun sizeOf(uri: Uri): Long? =
-        runCatching {
-            contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
-                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+    private fun describe(uri: Uri): Pair<String?, Long?> {
+        val (name, size) = runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (!c.moveToFirst()) return@use null
+                val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 && !c.isNull(it) }?.let { c.getString(it) }
+                val s = c.getColumnIndex(OpenableColumns.SIZE).takeIf { it >= 0 && !c.isNull(it) }?.let { c.getLong(it) }
+                n to s
             }
+        }.getOrNull() ?: (null to null)
+        val known = size ?: runCatching {
+            contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { n -> n >= 0 } }
         }.getOrNull()
-            ?: runCatching {
-                contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { n -> n >= 0 } }
-            }.getOrNull()
+        return name to known
+    }
 
     private fun dropCapture(uri: Uri) {
         if (uri.authority == AUTHORITY) runCatching { File(cacheDir, "capture").deleteRecursively() }

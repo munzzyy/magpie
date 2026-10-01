@@ -75,6 +75,7 @@ self.addEventListener("fetch", (event) => {
           let n = 0;
           for (const file of files.slice(0, 50)) {
             const headers = { "content-type": file.type || "application/octet-stream" };
+            if (file.name) headers["x-magpie-name"] = encodeURIComponent(file.name);
             // An oversized file parks as a bodiless 413 so the app can say so.
             await cache.put(
               `/share-incoming-${n++}`,

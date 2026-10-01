@@ -364,8 +364,8 @@ async function main() {
     // The worker parks shared files in a cache and an oversized one as a bodiless 413.
     await c.evalJs(`(async () => {
       const cache = await caches.open("magpie-share");
-      await cache.put("/share-incoming-0", new Response(null, { status: 413, headers: { "content-type": "video/mp4" } }));
-      await cache.put("/share-incoming-1", new Response(new Blob(["shared through the share sheet"]), { headers: { "content-type": "text/plain" } }));
+      await cache.put("/share-incoming-0", new Response(null, { status: 413, headers: { "content-type": "video/mp4", "x-magpie-name": "holiday%20video.mp4" } }));
+      await cache.put("/share-incoming-1", new Response(new Blob(["shared through the share sheet"]), { headers: { "content-type": "text/plain", "x-magpie-name": "notes%20from%20the%20call.txt" } }));
       return "ok";
     })()`, true);
     await c.send("Page.navigate", { url: BASE + "/?share-target=1" });
@@ -376,9 +376,10 @@ async function main() {
       document.getElementById("lock-form").requestSubmit();
     })()`);
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add' && !document.getElementById('attach-name').hidden"), "shared file staged");
-    check("share target: the small file is staged from its blob", (await c.evalJs("document.getElementById('attach-name').textContent")).includes("(1 KB)"));
+    const shareLine = await c.evalJs("document.getElementById('attach-name').textContent");
+    check("share target: the small file is staged from its blob, under its own name", shareLine === "Attached: notes from the call.txt (1 KB)", shareLine);
     const shareToast = await c.evalJs("document.getElementById('toast').textContent");
-    check("share target: the oversized one is refused, not read", shareToast.includes("is too big to attach"), shareToast);
+    check("share target: the oversized one is refused by name, not read", shareToast.includes("holiday video.mp4 is too big to attach"), shareToast);
     check("share target: the parking cache is emptied", (await c.evalJs("caches.open('magpie-share').then((x) => x.keys()).then((k) => k.length)", true)) === 0);
     await c.evalJs("document.getElementById('btn-add-cancel').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 4"), "timeline after the share target");

@@ -126,6 +126,8 @@ async function main() {
     })()`);
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add' && !document.getElementById('attach-name').hidden"), "shared file lands on add screen");
     check("share-in: attachment prefilled after unlock", true);
+    const sharedLine = await c.evalJs("document.getElementById('attach-name').textContent");
+    check("share-in: the shared file keeps its own name", sharedLine === "Attached: lease.pdf (2 KB)", sharedLine);
     check("wrapper: camera button offered", await c.evalJs("!document.getElementById('btn-camera').hidden"));
 
     await c.evalJs(`(() => {
@@ -133,6 +135,8 @@ async function main() {
       document.getElementById("add-form").requestSubmit();
     })()`);
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 1"), "shared entry chained");
+    const chainedName = await c.evalJs("__magpieApi.vault.listEntries().then((rows) => rows[0].entry.file.name)", true);
+    check("share-in: the chained entry carries the original name", chainedName === "lease.pdf", chainedName);
 
     await c.evalJs("document.getElementById('btn-export').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'export'"), "export screen");
@@ -151,7 +155,18 @@ async function main() {
       "too-big toast",
     );
     check("share-in: an oversized share is refused as too big", /is too big to attach; the limit is 50 MB\./.test(bigToast) && !bigToast.includes("Could not read"), bigToast);
+    check("share-in: and named", bigToast.startsWith("kitchen leak.mp4 is too big"), bigToast);
     check("share-in: and nothing is staged or chained", (await c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 1")) === true);
+
+    // No name, or one that does not decode, falls back to shared.<ext> from the type.
+    for (const [token, want] of [["noname", "shared.pdf"], ["badname", "shared.pdf"], ["accented", "contrato d\u00eda 1.pdf"]]) {
+      await c.evalJs(`__magpieShared([${JSON.stringify(token)}]); 'ok'`);
+      await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add' && !document.getElementById('attach-name').hidden"), `${token} staged`);
+      const line = await c.evalJs("document.getElementById('attach-name').textContent");
+      check(`share-in: ${token} is attached as ${want}`, line === `Attached: ${want} (2 KB)`, line);
+      await c.evalJs("document.getElementById('btn-add-cancel').click(); 'ok'");
+      await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "timeline again");
+    }
 
     // No target: a main-frame https tap is what shouldOverrideUrlLoading hands to the browser.
     await c.evalJs("document.querySelector('#screen-timeline details.danger').open = true; 'ok'");

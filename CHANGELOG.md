@@ -33,6 +33,10 @@
   screen is read now, and a file over the cap is refused by name before
   anything reads it. On Android a shared file over the cap used to end in
   "Could not read the shared file."; it says the file is too big now.
+- A file shared into Magpie from another app was chained as shared.bin or
+  shared.jpg, and since the name is part of the chain, every export said so
+  for good. Shared files keep the name the other app gave them now. One
+  that comes without a name gets one from its type, like shared.pdf.
 
 ## 0.5.1
 
