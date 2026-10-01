@@ -1,0 +1,1 @@
+Runs on Android 9, with a one-time note about its missing security fixes; exports there use the system save picker. With an Android System WebView older than 84, it says which version it needs instead of showing a blank page.

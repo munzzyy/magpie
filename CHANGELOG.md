@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
+
+Magpie runs on Android 9.
 
 - Magpie installs on Android 9 now. Exports there open the system save
   picker, since Android 9 won't let an app write to Downloads without a
