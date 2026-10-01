@@ -604,26 +604,29 @@ function wireEvents() {
     show("setup");
   });
 
-  // Hidden too long means locked, full stop.
+  // Hidden too long means locked, full stop. Number(null) is 0, hence the explicit default.
+  const autolock = $("autolock");
+  const autolockDefault = [...autolock.options].find((o) => o.defaultSelected)?.value ?? "60";
+  const storedAutolock = () => {
+    try {
+      const raw = localStorage.getItem("magpie-autolock");
+      return raw !== null && raw.trim() !== "" && Number.isFinite(Number(raw)) ? raw : null;
+    } catch {
+      return null;
+    }
+  };
   let hiddenAt = 0;
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       hiddenAt = Date.now();
       return;
     }
-    let limit = 60000;
-    try {
-      const v = Number(localStorage.getItem("magpie-autolock"));
-      if (Number.isFinite(v)) limit = v * 1000;
-    } catch {}
+    const limit = Number(storedAutolock() ?? autolockDefault) * 1000;
     if (!vault.isLocked() && hiddenAt && Date.now() - hiddenAt >= limit) {
       lockNow(t("Locked while you were away."));
     }
   });
-  const autolock = $("autolock");
-  try {
-    autolock.value = localStorage.getItem("magpie-autolock") ?? "60";
-  } catch {}
+  autolock.value = storedAutolock() ?? autolockDefault;
   autolock.addEventListener("change", () => {
     try {
       localStorage.setItem("magpie-autolock", autolock.value);

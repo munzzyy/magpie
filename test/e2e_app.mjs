@@ -154,6 +154,32 @@ async function main() {
       writeFileSync(path.join(SHOTS, "01-timeline-empty.png"), Buffer.from(s.result.data, "base64"));
     })();
 
+    // ---------------------------------------------------------- autolock
+    // A fresh install stores nothing, and a short trip to the camera must come back unlocked.
+    const hideFor = async (ms) => {
+      await c.evalJs(`Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")); 'ok'`);
+      await sleep(ms);
+      await c.evalJs(`Object.defineProperty(document, "hidden", { configurable: true, get: () => false }); document.dispatchEvent(new Event("visibilitychange")); 'ok'`);
+    };
+    check("autolock: a fresh install stores no setting", (await c.evalJs("localStorage.getItem('magpie-autolock')")) === null);
+    const autolockDefault = await c.evalJs("[...document.getElementById('autolock').options].find((o) => o.defaultSelected).value");
+    check("autolock: the select shows its default", (await c.evalJs("document.getElementById('autolock').value")) === autolockDefault, autolockDefault);
+    await hideFor(2000);
+    check(
+      `autolock: 2 s away with nothing stored keeps it open (default ${autolockDefault} s)`,
+      (await c.evalJs("__magpieApi.state.locked")) === (Number(autolockDefault) < 2),
+    );
+    await c.evalJs(`(() => { const s = document.getElementById("autolock"); s.value = "0"; s.dispatchEvent(new Event("change")); })()`);
+    await hideFor(300);
+    check("autolock: 'Immediately' locks on return", (await c.evalJs("__magpieApi.state.locked")) === true);
+    check("autolock: and says why", (await c.evalJs("document.getElementById('toast').textContent")) === "Locked while you were away.");
+    await c.evalJs(`delete document.hidden; localStorage.removeItem("magpie-autolock"); 'ok'`);
+    await c.evalJs(`(() => {
+      document.getElementById("lock-pass").value = ${JSON.stringify(PASS)};
+      document.getElementById("lock-form").requestSubmit();
+    })()`);
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "timeline after the autolock check");
+
     // ------------------------------------------------------ first entry
     await c.evalJs("document.getElementById('btn-add').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add'"), "add screen");

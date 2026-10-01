@@ -7,6 +7,10 @@
   with one accented letter failed as if it had been tampered with. It reads
   UTF-8 now. Exports from 0.5.1 and earlier still carry the old script; on
   Windows run those as `py -X utf8 verify.py`.
+- Auto-lock said "1 minute" on every install that never changed it, but
+  locked the moment the app was hidden, so a trip to the camera or the file
+  picker came back to the lock screen. With nothing stored it waits the
+  minute it shows now.
 
 ## 0.5.1
 
