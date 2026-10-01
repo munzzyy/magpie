@@ -14,7 +14,7 @@ const dec = new TextDecoder();
 
 const pad = (n) => String(n).padStart(3, "0");
 
-const safeName = (name) => name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "file";
+export const safeName = (name) => name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80) || "file";
 
 export const VERIFY_PY = `#!/usr/bin/env python3
 # Verifies a Magpie export without Magpie: recomputes the hash chain and
@@ -26,6 +26,10 @@ import argparse, hashlib, json, os, re, sys
 
 KEYS = ["v", "seq", "ts", "type", "title", "note", "file"]
 FILE_KEYS = ["name", "mime", "size", "sha256"]
+SAFE = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
+
+class Bad(Exception):
+    pass
 
 def canonical(e):
     parts = []
@@ -34,61 +38,98 @@ def canonical(e):
         if k == "file" and v is not None:
             v = {fk: v.get(fk) for fk in FILE_KEYS}
         parts.append(json.dumps(k) + ":" + json.dumps(v, ensure_ascii=False, separators=(",", ":")))
-    return "{" + ",".join(parts) + "}"
+    # A lone surrogate: JSON.stringify escapes it, json.dumps leaves it raw, .encode() refuses it.
+    return re.sub("[\\ud800-\\udfff]", lambda m: "\\\\u%04x" % ord(m.group()), "{" + ",".join(parts) + "}")
+
+def safe_name(name):
+    # export.js safeName; its regex has no u flag, so an astral character becomes two underscores.
+    out = "".join(c if c in SAFE else "__" if ord(c) > 0xFFFF else "_" for c in name)
+    return out[:80] or "file"
+
+def load_json(base, name):
+    path = os.path.join(base, name)
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise Bad(f"{name} is missing from {base}")
+    except (OSError, ValueError) as err:
+        raise Bad(f"{name} in {base} could not be read as JSON ({err})")
 
 def load(base):
-    manifest = json.load(open(os.path.join(base, "manifest.json"), encoding="utf-8"))
-    entries = json.load(open(os.path.join(base, "entries.json"), encoding="utf-8"))
+    manifest = load_json(base, "manifest.json")
+    entries = load_json(base, "entries.json")
+    if not isinstance(manifest, dict) or not all(isinstance(manifest.get(k), str) for k in ("genesis", "head")):
+        raise Bad(f"manifest.json in {base} has no genesis or head")
+    if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+        raise Bad(f"entries.json in {base} is not a list of entries")
     return manifest, entries
 
+def file_digest(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
 def verify_chain(base, manifest, entries):
-    # Recomputes the chain from scratch. heads[i] is the head after entry
-    # i + 1, so a shorter export's head, or one shared earlier, can be found
-    # in a longer one. warn_seq is the first entry whose ts is earlier than
-    # the entry before it: the chain proves insertion order, not clock order,
-    # so this is a warning, never a failure. Clocks drift and phones change
-    # time zones.
+    # heads[i] is the head after entry i + 1. A clock going backwards is a warning, never a failure.
     prev = manifest["genesis"]
     heads = []
+    covered = set()
     prev_ts = None
     warn_seq = None
     for i, e in enumerate(entries):
-        if e["seq"] != i + 1:
-            return False, f"entry {i} has seq {e['seq']}", None, None
-        h = hashlib.sha256((prev + "\\n" + canonical(e)).encode()).hexdigest()
-        prev = h
-        heads.append(h)
-        if e.get("file"):
-            path = os.path.join(base, "files", f"{e['seq']:03d}-" + e["_filename"])
-            digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
-            if digest != e["file"]["sha256"]:
-                return False, f"attachment for entry {e['seq']} does not match its recorded hash", None, None
-        if warn_seq is None and prev_ts is not None and e["ts"] < prev_ts:
-            warn_seq = e["seq"]
-        prev_ts = e["ts"]
+        seq = e.get("seq")
+        if seq != i + 1:
+            raise Bad(f"entry {i + 1} in entries.json has seq {seq!r}")
+        f = e.get("file")
+        if f is not None and not (isinstance(f, dict) and isinstance(f.get("name"), str) and isinstance(f.get("sha256"), str)):
+            raise Bad(f"entry {seq}'s file record is malformed")
+        prev = hashlib.sha256((prev + "\\n" + canonical(e)).encode()).hexdigest()
+        heads.append(prev)
+        if f is not None:
+            # _filename sits outside the hash; only the chained name decides where the file lives.
+            want = f"files/{seq:03d}-{safe_name(f['name'])}"
+            got = f"files/{seq:03d}-{e.get('_filename')}"
+            if got != want:
+                raise Bad(f"entry {seq}'s attachment is listed as {got}, but its chained name makes it {want}")
+            try:
+                digest = file_digest(os.path.join(base, *want.split("/")))
+            except OSError:
+                raise Bad(f"the attachment for entry {seq} is missing ({want})")
+            if digest != f["sha256"]:
+                raise Bad(f"attachment for entry {seq} does not match its recorded hash")
+            covered.add(want)
+        ts = e.get("ts")
+        if warn_seq is None and isinstance(prev_ts, str) and isinstance(ts, str) and ts < prev_ts:
+            warn_seq = seq
+        prev_ts = ts
     if prev != manifest["head"]:
-        return False, f"recomputed head {prev} != recorded head {manifest['head']}", None, None
-    return True, prev, heads, warn_seq
+        raise Bad(f"recomputed head {prev} != recorded head {manifest['head']}")
+    return prev, heads, covered, warn_seq
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--extends", metavar="DIR", help="an earlier export this one must append-only extend")
-    ap.add_argument("--anchor", metavar="HASH", action="append", default=[],
-                    help="a head hash shared earlier (repeatable): names the entry it was the head after")
-    args = ap.parse_args()
-    anchors = []
-    for a in args.anchor:
-        if not re.fullmatch("[0-9a-fA-F]{64}", a):
-            ap.error(f"--anchor takes a full 64-character hex head hash, not {a!r}")
-        anchors.append(a.lower())
+def uncovered(base, covered):
+    extra = []
+    for dirpath, _, names in os.walk(os.path.join(base, "files")):
+        for name in names:
+            rel = os.path.relpath(os.path.join(dirpath, name), base).replace(os.sep, "/")
+            if rel not in covered:
+                extra.append(rel)
+    return sorted(extra)
 
+def run(args, anchors):
     base = os.path.dirname(os.path.abspath(__file__))
     manifest, entries = load(base)
-    ok, head_or_reason, heads, warn_seq = verify_chain(base, manifest, entries)
-    if not ok:
-        print("FAIL:", head_or_reason)
-        sys.exit(1)
-    print("OK:", len(entries), "entries verify; head", head_or_reason)
+    head, heads, covered, warn_seq = verify_chain(base, manifest, entries)
+    n = len(entries)
+    print("OK:", n, "entry verifies;" if n == 1 else "entries verify;", "head", head)
+    extra = uncovered(base, covered)
+    if extra:
+        print("WARNING: not covered by the chain:")
+        for rel in extra:
+            print("  " + rel)
+        print("No entry vouches for these files, so they prove nothing about the journal.")
     if warn_seq is not None:
         print(f"WARNING: entry {warn_seq}'s recorded time is earlier than the entry before it.")
         print("The chain still verifies. This only means a clock moved backward at some point,")
@@ -100,7 +141,7 @@ def main():
     missed = False
     for a in anchors:
         if a in heads:
-            print(f"ANCHOR: {a} is the head after entry {heads.index(a) + 1} of {len(entries)}")
+            print(f"ANCHOR: {a} is the head after entry {heads.index(a) + 1} of {n}")
         else:
             print(f"FAIL: {a} is not the head of this journal after any entry")
             missed = True
@@ -112,19 +153,41 @@ def main():
 
     if args.extends:
         older_manifest, older_entries = load(args.extends)
-        if older_manifest.get("genesis") != manifest.get("genesis"):
-            print("FAIL: the two exports do not share a genesis; they are not the same journal")
-            sys.exit(1)
+        if older_manifest["genesis"] != manifest["genesis"]:
+            raise Bad("the two exports do not share a genesis; they are not the same journal")
+        try:
+            verify_chain(args.extends, older_manifest, older_entries)
+        except Bad as err:
+            raise Bad(f"the older export does not verify on its own: {err}")
         older_count = len(older_entries)
-        if older_count > len(entries):
-            print("FAIL: the older export has more entries than this one; it cannot be a prefix")
-            sys.exit(1)
-        prefix_head = heads[older_count - 1] if older_count else None
-        if prefix_head != older_manifest["head"]:
-            print("FAIL: this export does not extend", args.extends, "the chains diverge before entry", older_count)
-            sys.exit(1)
+        if older_count > n:
+            raise Bad("the older export has more entries than this one; it cannot be a prefix")
+        if ([manifest["genesis"]] + heads)[older_count] != older_manifest["head"]:
+            raise Bad(f"this export does not extend {args.extends}; the chains diverge at or before entry {older_count}")
         print("EXTENDS: this export is an append-only continuation of", args.extends)
         print(f"the first {older_count} entries are byte-for-byte the same and share the head", older_manifest["head"])
+
+def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--extends", metavar="DIR", help="an earlier export this one must append-only extend")
+    ap.add_argument("--anchor", metavar="HASH", action="append", default=[],
+                    help="a head hash shared earlier (repeatable): names the entry it was the head after")
+    args = ap.parse_args()
+    anchors = []
+    for a in args.anchor:
+        if not re.fullmatch("[0-9a-fA-F]{64}", a):
+            ap.error(f"--anchor takes a full 64-character hex head hash, not {a!r}")
+        anchors.append(a.lower())
+    try:
+        run(args, anchors)
+    except Bad as err:
+        print("FAIL:", err)
+        sys.exit(1)
+    except Exception as err:
+        print(f"FAIL: this export could not be checked ({type(err).__name__}: {err})")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
@@ -141,8 +204,10 @@ On Windows the command is usually:
     py verify.py
 
 It recomputes the whole hash chain and every attachment digest from
-scratch. If anything in entries.json or files/ was edited, reordered, or
-removed after export, verification fails.
+scratch. If anything in entries.json or files/ was edited, reordered,
+renamed or removed after export, verification fails. A file added to
+files/ afterwards doesn't fail it, but it is listed as not covered by the
+chain: no entry vouches for it.
 
 If you also have an earlier export of the same journal, point this one
 at it and prove the newer export only ever appended to the older one,

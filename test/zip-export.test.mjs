@@ -7,13 +7,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { buildZip, crc32, readZip } from "../app/js/zip.js";
 import { canonical, makeEntry } from "../app/js/canon.js";
 import { entryHash, GENESIS, sha256Hex } from "../app/js/chain.js";
-import { VERIFY_PY, VERIFY_MD, selfVerifyExport } from "../app/js/export.js";
+import { VERIFY_PY, VERIFY_MD, safeName, selfVerifyExport } from "../app/js/export.js";
 
 const enc = new TextEncoder();
 
@@ -240,7 +240,7 @@ test("emoji split across the truncation boundary cannot brick the python verifie
     writeFileSync(path.join(dir, "entries.json"), JSON.stringify([out]));
     writeFileSync(path.join(dir, "verify.py"), VERIFY_PY);
     const ok = execFileSync("python3", [path.join(dir, "verify.py")], { encoding: "utf8" });
-    assert.match(ok, /^OK: 1 entries verify/);
+    assert.match(ok, /^OK: 1 entry verifies/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -282,3 +282,151 @@ test("verify.py reads the export as UTF-8 whatever Python's default text encodin
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Lays an export out the way buildExport() does; rows with bytes get an attachment.
+async function writeExportDir(dir, rows) {
+  mkdirSync(path.join(dir, "files"), { recursive: true });
+  let head = GENESIS;
+  const entries = [];
+  for (const [i, row] of rows.entries()) {
+    const seq = i + 1;
+    const file = row.bytes ? { name: row.name, mime: "application/octet-stream", size: row.bytes.length, sha256: await sha256Hex(row.bytes) } : null;
+    const entry = makeEntry({ seq, ts: `2026-09-06T12:00:${String(seq).padStart(2, "0")}.000Z`, type: file ? "file" : "note", title: row.title ?? `t${seq}`, note: row.note ?? "", file });
+    head = await entryHash(head, entry);
+    const out = JSON.parse(canonical(entry));
+    if (file) {
+      out._filename = safeName(entry.file.name);
+      writeFileSync(path.join(dir, "files", `${String(seq).padStart(3, "0")}-${out._filename}`), row.bytes);
+    }
+    entries.push(out);
+  }
+  writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ format: "magpie-export", v: 1, genesis: GENESIS, head, count: entries.length }));
+  writeFileSync(path.join(dir, "entries.json"), JSON.stringify(entries));
+  writeFileSync(path.join(dir, "verify.py"), VERIFY_PY);
+  return { head, entries };
+}
+
+const runVerify = (dir, ...args) => spawnSync("python3", [path.join(dir, "verify.py"), ...args], { encoding: "utf8" });
+
+function withDir(prefix, fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  return Promise.resolve(fn(dir)).finally(() => rmSync(dir, { recursive: true, force: true }));
+}
+
+test("a lone surrogate in a note hashes the same in python as in JS", () =>
+  withDir("magpie-lone-", async (dir) => {
+    const { head } = await writeExportDir(dir, [{ note: "a\uD800b" }, { title: "after it \uDE00" }]);
+    const r = runVerify(dir);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, new RegExp(`^OK: 2 entries verify; head ${head}$`, "m"));
+
+    // Negative control: a different lone surrogate is a different note.
+    const entries = JSON.parse(readFileSync(path.join(dir, "entries.json"), "utf8"));
+    entries[0].note = "a\uD801b";
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify(entries));
+    const tampered = runVerify(dir);
+    assert.equal(tampered.status, 1);
+    assert.match(tampered.stdout, /^FAIL: recomputed head/);
+  }));
+
+test("a broken export fails with a sentence, never a traceback", () =>
+  withDir("magpie-broken-", async (dir) => {
+    const bytes = enc.encode("the attachment");
+    const { entries } = await writeExportDir(dir, [{}, { name: "proof.txt", bytes }]);
+    assert.equal(runVerify(dir).status, 0);
+    const failsCleanly = (why, pattern) => {
+      const r = runVerify(dir);
+      assert.equal(r.status, 1, why);
+      assert.match(r.stdout, pattern, why);
+      assert.doesNotMatch(r.stderr, /Traceback/, why);
+    };
+    const restore = () => {
+      writeFileSync(path.join(dir, "entries.json"), JSON.stringify(entries));
+      assert.equal(runVerify(dir).status, 0);
+    };
+
+    unlinkSync(path.join(dir, "files", "002-proof.txt"));
+    failsCleanly("missing attachment", /^FAIL: the attachment for entry 2 is missing \(files\/002-proof\.txt\)/);
+    writeFileSync(path.join(dir, "files", "002-proof.txt"), bytes);
+    restore();
+
+    writeFileSync(path.join(dir, "entries.json"), "[{");
+    failsCleanly("entries.json is not JSON", /^FAIL: entries\.json in .* could not be read as JSON/);
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify({ entries }));
+    failsCleanly("entries.json is not a list", /^FAIL: entries\.json in .* is not a list of entries/);
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify([{ ...entries[0], seq: undefined }, entries[1]]));
+    failsCleanly("an entry without a seq", /^FAIL: entry 1 in entries\.json has seq None/);
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify([entries[0], { ...entries[1], file: "proof.txt" }]));
+    failsCleanly("a file record that is not an object", /^FAIL: entry 2's file record is malformed/);
+    restore();
+
+    const manifest = path.join(dir, "manifest.json");
+    renameSync(manifest, manifest + ".gone");
+    failsCleanly("missing manifest.json", /^FAIL: manifest\.json is missing from /);
+    writeFileSync(manifest, JSON.stringify({ format: "magpie-export", v: 1, genesis: GENESIS }));
+    failsCleanly("manifest.json without a head", /^FAIL: manifest\.json in .* has no genesis or head/);
+    renameSync(manifest + ".gone", manifest);
+    assert.equal(runVerify(dir).status, 0);
+  }));
+
+test("files the chain does not cover are named, and a renamed attachment fails", () =>
+  withDir("magpie-cover-", async (dir) => {
+    const bytes = enc.encode("photo bytes");
+    const { entries } = await writeExportDir(dir, [{}, { name: "photo.jpg", bytes }]);
+    const clean = runVerify(dir);
+    assert.equal(clean.status, 0);
+    assert.doesNotMatch(clean.stdout, /not covered/);
+
+    writeFileSync(path.join(dir, "files", "002-planted.jpg"), enc.encode("planted"));
+    mkdirSync(path.join(dir, "files", "more"));
+    writeFileSync(path.join(dir, "files", "more", "x.bin"), enc.encode("planted too"));
+    const planted = runVerify(dir);
+    assert.equal(planted.status, 0, planted.stdout + planted.stderr);
+    assert.match(planted.stdout, /^OK: 2 entries verify/);
+    assert.match(planted.stdout, /^WARNING: not covered by the chain:\n {2}files\/002-planted\.jpg\n {2}files\/more\/x\.bin\n/m);
+    assert.doesNotMatch(planted.stdout, /002-photo\.jpg/);
+    rmSync(path.join(dir, "files", "002-planted.jpg"));
+    rmSync(path.join(dir, "files", "more"), { recursive: true });
+
+    // The bytes still match their hash, but the name outside the hash moved.
+    renameSync(path.join(dir, "files", "002-photo.jpg"), path.join(dir, "files", "002-renamed.jpg"));
+    const renamed = structuredClone(entries);
+    renamed[1]._filename = "renamed.jpg";
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify(renamed));
+    const r = runVerify(dir);
+    assert.equal(r.status, 1, r.stdout);
+    assert.match(r.stdout, /^FAIL: entry 2's attachment is listed as files\/002-renamed\.jpg, but its chained name makes it files\/002-photo\.jpg/);
+  }));
+
+test("python files attachments under the same names export.js gives them", () =>
+  withDir("magpie-names-", async (dir) => {
+    const names = ["foto \u{1F600}.jpg", "\u{1F600}", "lease (final).pdf", "\u00f1and\u00fa.png", "x".repeat(100) + ".txt", "a/b\\c..d", "\uD800lone"];
+    await writeExportDir(dir, names.map((name, i) => ({ name, bytes: enc.encode(`file ${i}`) })));
+    const r = runVerify(dir);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /^OK: 7 entries verify/);
+    assert.doesNotMatch(r.stdout, /not covered/);
+  }));
+
+test("--extends checks the older export on its own, and an empty one is a valid prefix", () =>
+  withDir("magpie-extends2-", async (dir) => {
+    const newer = path.join(dir, "newer");
+    const { entries } = await writeExportDir(newer, [{}, {}, {}]);
+    const empty = path.join(dir, "empty");
+    await writeExportDir(empty, []);
+    const fromEmpty = runVerify(newer, "--extends", empty);
+    assert.equal(fromEmpty.status, 0, fromEmpty.stdout + fromEmpty.stderr);
+    assert.match(fromEmpty.stdout, /^EXTENDS:/m);
+
+    // Negative control: the older export's own entries were edited after it was made.
+    const older = path.join(dir, "older");
+    await writeExportDir(older, [{}, {}]);
+    const r0 = runVerify(newer, "--extends", older);
+    assert.equal(r0.status, 0, r0.stdout + r0.stderr);
+    const edited = structuredClone(entries.slice(0, 2));
+    edited[0].note = "edited after the fact";
+    writeFileSync(path.join(older, "entries.json"), JSON.stringify(edited));
+    const r = runVerify(newer, "--extends", older);
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /^FAIL: the older export does not verify on its own: recomputed head/m);
+  }));

@@ -20,6 +20,13 @@
   shared earlier and names the entry it pinned, or fails if the hash never
   belonged to this journal. Until now nothing in an export let someone
   holding only the emailed hash check it.
+- verify.py is harder to fool and plainer when something is wrong. A lone
+  half of an emoji pair in a note no longer makes every later export of the
+  journal unverifiable in Python. A missing file or a broken JSON file gets
+  a FAIL line instead of a stack trace. A file dropped into files/ after the
+  export is listed as not covered by the chain, an attachment renamed after
+  the export fails, and `--extends` checks the older export on its own too.
+  One entry reads "1 entry verifies".
 
 ## 0.5.1
 
