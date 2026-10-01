@@ -42,6 +42,11 @@
   and only publishes the release APK when the two match. The README says so
   now, gives the signing certificate's digest, and shows how to run the same
   comparison with `tools/compare-apk.py`, which needs only Python.
+- The last messages that said "file(s)", "day(s)" or "entry(ies)", and the
+  Spanish "añadida(s)", use the right form for one and for more. Dates in
+  the timeline follow the language picked in Settings instead of the
+  browser's, and switching language redraws the timeline. The lock
+  button's tooltip is translated too.
 
 ## 0.5.1
 

@@ -6,7 +6,7 @@ import * as vault from "./vault.js";
 import { buildExport } from "./export.js";
 import { isWrapper, wrapperVersion, shareOut, saveOut, canCapture, capturePhoto, onCaptured, sharedTokens, onShared, ExportUnavailableError } from "./platform.js";
 import { isBundled } from "./env.js";
-import { setLocale, resolveLocale, translateDom, t, tn, LOCALE_CHOICES } from "./i18n.js";
+import { setLocale, resolveLocale, translateDom, currentLocale, t, tn, LOCALE_CHOICES } from "./i18n.js";
 
 const VERSION = "0.5.1";
 
@@ -57,7 +57,7 @@ let justSealedSeq = null;
 const app = {
   get state() {
     return {
-      screen: SCREENS.find((s) => !$(`screen-${s}`).hidden) || "none",
+      screen: SCREENS.find((name) => !$(`screen-${name}`).hidden) || "none",
       locked: vault.isLocked(),
       wrapper: isWrapper(),
       pendingShared: pendingShared.length,
@@ -120,7 +120,12 @@ function lockNow(message) {
 
 // ------------------------------------------------------------- timeline
 
-const fmtTs = (iso) => new Date(iso).toLocaleString();
+// The browser's own regional tag when it speaks the chosen language (en-GB keeps its day/month order).
+const dateLocale = () => {
+  const code = currentLocale();
+  return (navigator.languages || []).find((tag) => String(tag).slice(0, 2).toLowerCase() === code) || code;
+};
+const fmtTs = (iso) => new Date(iso).toLocaleString(dateLocale());
 
 async function renderTimeline() {
   const rows = await vault.listEntries();
@@ -288,6 +293,8 @@ const nameHeader = (headers, mime) => {
   } catch {}
   return sharedName(mime);
 };
+const moreWaiting = (n) =>
+  tn(n, "{count} more shared file waiting; it becomes its own entry.", "{count} more shared files waiting; each becomes its own entry.");
 const tooBigText = (name) => t("{name} is too big to attach; the limit is {mb} MB.", { name, mb: MAX_ATTACH_MB });
 
 // Too big is decided before any body is read: the wrapper answers 413, a Blob knows its size.
@@ -322,7 +329,7 @@ async function nextSharedIntoAdd() {
       show("add");
       setPendingAttach(got.bytes, got.name, got.mime);
       if (pendingShared.length) {
-        notes.push(t("{count} more shared file(s) waiting; each becomes its own entry.", { count: pendingShared.length }));
+        notes.push(moreWaiting(pendingShared.length));
       }
       if (notes.length) toast(notes.join(" "));
       return;
@@ -391,11 +398,11 @@ async function updateAnchorStatus(liveCount) {
     line.textContent =
       anchor.count >= liveCount
         ? t("Pinned through entry {n}.", { n: anchor.count })
-        : t("Pinned through entry {n}. {more} added since.", { n: anchor.count, more: liveCount - anchor.count });
+        : tn(liveCount - anchor.count, "Pinned through entry {n}. {count} entry added since.", "Pinned through entry {n}. {count} entries added since.", { n: anchor.count });
   }
   if (reminder) {
     const days = Math.floor((Date.now() - anchor.ts) / 86400000);
-    reminder.textContent = days <= 0 ? t("Exported today.") : t("{days} day(s) since your last export.", { days });
+    reminder.textContent = days <= 0 ? t("Exported today.") : tn(days, "{count} day since your last export.", "{count} days since your last export.");
   }
 }
 
@@ -479,7 +486,7 @@ function wireEvents() {
       $("restore-file").value = "";
       await renderTimeline();
       show("timeline");
-      toast(t("Restored: {count} entry(ies).", { count }));
+      toast(tn(count, "Restored: {count} entry.", "Restored: {count} entries."));
       if (pendingShared.length) await nextSharedIntoAdd();
     } catch (err) {
       __magpieErrors.push(`restore: ${err}`);
@@ -543,7 +550,7 @@ function wireEvents() {
     for (const f of rest) pendingShared.push({ blob: f, mime: f.type || "application/octet-stream", name: f.name });
     setPendingAttach(new Uint8Array(await first.arrayBuffer()), first.name, first.type || "application/octet-stream");
     if (rest.length) {
-      notes.push(t("{count} more shared file(s) waiting; each becomes its own entry.", { count: rest.length }));
+      notes.push(moreWaiting(rest.length));
     }
     if (notes.length) toast(notes.join(" "));
   });
@@ -691,6 +698,7 @@ function buildLocalePicker() {
     } catch {}
     setLocale(resolveLocale(select.value));
     translateDom();
+    if (!vault.isLocked()) renderTimeline().catch((err) => __magpieErrors.push(`locale: ${err}`));
   });
 }
 

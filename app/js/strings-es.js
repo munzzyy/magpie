@@ -97,8 +97,10 @@ export const es = {
     "Cadena intacta: {count} entradas verifican. La hora de la entrada {seq} es anterior a la de la entrada previa.",
   "Entry {seq} chained": "Entrada {seq} encadenada",
   "Attached: {name} ({kb} KB)": "Adjunto: {name} ({kb} KB)",
-  "{count} more shared file(s) waiting; each becomes its own entry.":
-    "{count} archivo(s) compartidos más en espera; cada uno será su propia entrada.",
+  "{count} more shared file waiting; it becomes its own entry.":
+    "{count} archivo compartido más en espera; será su propia entrada.",
+  "{count} more shared files waiting; each becomes its own entry.":
+    "{count} archivos compartidos más en espera; cada uno será su propia entrada.",
   "Could not save the entry.": "No se pudo guardar la entrada.",
   "Could not read the shared file.": "No se pudo leer el archivo compartido.",
   "{name} is too big to attach; the limit is {mb} MB.":
@@ -119,7 +121,8 @@ export const es = {
   "You have not exported this journal yet. Keep a copy somewhere safe.":
     "Todavía no has exportado este diario. Guarda una copia en un lugar seguro.",
   "Exported today.": "Exportado hoy.",
-  "{days} day(s) since your last export.": "{days} día(s) desde tu última exportación.",
+  "{count} day since your last export.": "{count} día desde tu última exportación.",
+  "{count} days since your last export.": "{count} días desde tu última exportación.",
 
   "Restore from a sealed backup": "Restaurar desde una copia sellada",
   "Backup file": "Archivo de copia",
@@ -136,7 +139,8 @@ export const es = {
   "Search titles and notes": "Buscar en títulos y notas",
 
   "Pinned through entry {n}.": "Fijado hasta la entrada {n}.",
-  "Pinned through entry {n}. {more} added since.": "Fijado hasta la entrada {n}. {more} añadida(s) desde entonces.",
+  "Pinned through entry {n}. {count} entry added since.": "Fijado hasta la entrada {n}. {count} entrada añadida desde entonces.",
+  "Pinned through entry {n}. {count} entries added since.": "Fijado hasta la entrada {n}. {count} entradas añadidas desde entonces.",
   "Not yet anchored. Export and share the head hash to pin the record.":
     "Todavía sin fijar. Exporta y comparte la cabeza de la cadena para fijar el registro.",
   "A journal already exists on this device. Delete it first, then restore.":
@@ -149,9 +153,11 @@ export const es = {
   "This backup's chain does not verify. It may be tampered with, so it was refused.":
     "La cadena de esta copia no verifica. Puede haber sido manipulada, así que se rechazó.",
   "Could not restore this backup.": "No se pudo restaurar esta copia.",
-  "Restored: {count} entry(ies).": "Restaurado: {count} entrada(s).",
+  "Restored: {count} entry.": "Restaurado: {count} entrada.",
+  "Restored: {count} entries.": "Restaurado: {count} entradas.",
   "Sealed backup downloaded. It is safe to park anywhere; only your passphrase opens it.":
     "Copia sellada descargada. Es segura para guardar donde sea; solo tu frase la abre.",
   "Choose where to save your sealed backup.": "Elige dónde guardar tu copia sellada.",
   "Made by": "Hecho por",
+  "Lock": "Bloquear",
 };

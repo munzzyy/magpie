@@ -360,6 +360,23 @@ async function main() {
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 4"), "entries after reload");
     check("reload: vault persists and reopens", true);
 
+    // ------------------------------------------- language and timestamps
+    const pickLocale = (code) => c.evalJs(`(() => { const p = document.getElementById("locale-pick"); p.value = ${JSON.stringify(code)}; p.dispatchEvent(new Event("change")); return "ok"; })()`);
+    await pickLocale("es");
+    const esMeta = await waitFor(
+      () => c.evalJs(`__magpieApi.vault.listEntries().then((rows) => {
+        const want = new Date(rows[rows.length - 1].entry.ts).toLocaleString("es");
+        const got = document.querySelector("#timeline .tl-meta").textContent;
+        return got.includes(want) && { got, want };
+      })`, true),
+      "timeline dates in Spanish",
+    );
+    check("locale: picking Español redraws the timeline with Spanish dates", true, JSON.stringify(esMeta));
+    check("locale: the lock button's tooltip is translated", (await c.evalJs("document.getElementById('btn-lock').title")) === "Bloquear");
+    await pickLocale("auto");
+    await c.evalJs("localStorage.removeItem('magpie-locale'); 'ok'");
+    await waitFor(() => c.evalJs("document.getElementById('btn-lock').title === 'Lock'"), "back to English");
+
     // ------------------------------------------- web share-target pickup
     // The worker parks shared files in a cache and an oversized one as a bodiless 413.
     await c.evalJs(`(async () => {
