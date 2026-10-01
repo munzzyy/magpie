@@ -68,6 +68,14 @@ differ, in [docs/IOS.md](docs/IOS.md).
 
 ## Check the claims
 
+To check an export, unzip it and run `python3 verify.py` in the folder
+(`py verify.py` on Windows). It needs Python and nothing else. One catch on
+Windows with Python 3.14 or older: the verify.py inside exports from Magpie
+0.5.1 and earlier reads the files in Windows' default text encoding, so a
+single accented letter makes a genuine export look tampered with. Run those
+as `py -X utf8 verify.py`. Newer exports carry a verify.py that doesn't
+need it.
+
 `npm test` runs the chain, crypto, service-worker, and zip suites; the
 zip suite cross-checks against python3 and system unzip, so have both
 around. The export verifier is re-implemented in pure Python stdlib and

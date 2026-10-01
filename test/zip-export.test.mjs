@@ -6,7 +6,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -210,6 +210,43 @@ test("emoji split across the truncation boundary cannot brick the python verifie
     writeFileSync(path.join(dir, "verify.py"), VERIFY_PY);
     const ok = execFileSync("python3", [path.join(dir, "verify.py")], { encoding: "utf8" });
     assert.match(ok, /^OK: 1 entries verify/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Python 3.14 and older on Windows open text in the ANSI code page; the shim forces that here.
+const AS_WINDOWS = [
+  "import builtins, runpy, sys",
+  "_o = builtins.open",
+  'def o(f, mode="r", *a, **k):',
+  '    if "b" not in mode and "encoding" not in k and len(a) < 2: k["encoding"] = "cp1252"',
+  "    return _o(f, mode, *a, **k)",
+  'builtins.open = o; sys.argv = [sys.argv[1]]; runpy.run_path(sys.argv[0], run_name="__main__")',
+  "",
+].join("\n");
+
+test("verify.py reads the export as UTF-8 whatever Python's default text encoding is", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "magpie-win-"));
+  try {
+    const entry = makeEntry({ seq: 1, ts: "2026-09-06T12:00:01.000Z", type: "note", title: "Fuga en la cocina, d\u00eda 1", note: "", file: null });
+    const head = await entryHash(GENESIS, entry);
+    writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ format: "magpie-export", v: 1, genesis: GENESIS, head, count: 1 }));
+    writeFileSync(path.join(dir, "entries.json"), JSON.stringify([JSON.parse(canonical(entry))]));
+    writeFileSync(path.join(dir, "as_windows.py"), AS_WINDOWS);
+    const runAsWindows = (verifier) => {
+      writeFileSync(path.join(dir, "verify.py"), verifier);
+      return spawnSync("python3", [path.join(dir, "as_windows.py"), path.join(dir, "verify.py")], { encoding: "utf8" });
+    };
+
+    const ok = runAsWindows(VERIFY_PY);
+    assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+    assert.match(ok.stdout, /^OK:/);
+
+    // Negative control: the same verifier without the explicit encoding.
+    const old = runAsWindows(VERIFY_PY.replaceAll(', encoding="utf-8"', ""));
+    assert.notEqual(old.status, 0);
+    assert.match(old.stdout, /^FAIL: recomputed head/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- verify.py read an export in the computer's default text encoding. On
+  Windows with Python 3.14 or older that is not UTF-8, so a genuine export
+  with one accented letter failed as if it had been tampered with. It reads
+  UTF-8 now. Exports from 0.5.1 and earlier still carry the old script; on
+  Windows run those as `py -X utf8 verify.py`.
+
 ## 0.5.1
 
 Magpie has an icon of its own.

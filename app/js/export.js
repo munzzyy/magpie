@@ -36,8 +36,8 @@ def canonical(e):
     return "{" + ",".join(parts) + "}"
 
 def load(base):
-    manifest = json.load(open(os.path.join(base, "manifest.json")))
-    entries = json.load(open(os.path.join(base, "entries.json")))
+    manifest = json.load(open(os.path.join(base, "manifest.json"), encoding="utf-8"))
+    entries = json.load(open(os.path.join(base, "entries.json"), encoding="utf-8"))
     return manifest, entries
 
 def verify_chain(base, manifest, entries, want_head_at=None):
@@ -118,6 +118,10 @@ export const VERIFY_MD = `# Verifying this export
 This folder is self-proving. Run:
 
     python3 verify.py
+
+On Windows the command is usually:
+
+    py verify.py
 
 It recomputes the whole hash chain and every attachment digest from
 scratch. If anything in entries.json or files/ was edited, reordered, or
