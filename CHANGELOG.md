@@ -37,6 +37,11 @@
   shared.jpg, and since the name is part of the chain, every export said so
   for good. Shared files keep the name the other app gave them now. One
   that comes without a name gets one from its type, like shared.pdf.
+- The README said nothing independent checks the Android APK against the
+  source. F-Droid's recipe for Magpie already does: it rebuilds each version
+  and only publishes the release APK when the two match. The README says so
+  now, gives the signing certificate's digest, and shows how to run the same
+  comparison with `tools/compare-apk.py`, which needs only Python.
 
 ## 0.5.1
 

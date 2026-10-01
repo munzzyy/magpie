@@ -63,3 +63,6 @@ cp "$APK_OUT" dist/magpie.apk
 
 echo "== artifacts =="
 sha256sum "$APK_OUT" "$AAB_OUT" dist/magpie.apk
+
+echo "== for the release notes =="
+APKSIGNER="$APKSIGNER" tools/verify-block.sh "$APK_OUT" "$AAB_OUT"

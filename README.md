@@ -109,25 +109,40 @@ For development: `node test/serve_local.mjs` serves the web app, and
 `cd android && ./gradlew assembleDebug` builds an installable debug APK
 (release signing goes through `tools/release-android.sh`).
 
+## Check the APK
+
+Every Magpie APK is signed with the same key. Its certificate's SHA-256 is
+
+    35d26c85cf963570aafda3dccce4d28fcb041f712cf15cd24ab8cc7d694be526
+
+and `apksigner verify --print-certs magpie.apk` prints it. GitHub shows the
+sha256 of every file attached to a release. Neither tells you the APK was
+built from this source, though. That is the same developer publishing a
+hash next to a binary they built.
+
+Two things do tie the APK to the source. F-Droid's recipe for Magpie
+builds each version from its tagged commit on F-Droid's own build server
+and compares the result with the APK on the GitHub release. F-Droid only
+publishes that APK, still under this signature, when the two match apart
+from the signature. And you can run the same comparison yourself: check
+out the release tag, run `cd android && ./gradlew assembleRelease`, then
+
+    python3 tools/compare-apk.py android/app/build/outputs/apk/release/app-release-unsigned.apk magpie-0.5.1.apk
+
+It needs only Python. It skips the signature files, checks every other
+entry's name, order, compression and bytes, and prints SAME or lists what
+differs. A build of the v0.5.1 tag matches the published magpie-0.5.1.apk
+on all 104 entries.
+
 ## Bugs, holes, contributions
 
 A way to change a chained entry without breaking verification is the bug
 that matters; [SECURITY.md](SECURITY.md) has the private route for that.
-Everything else: issues and pull requests are open and welcome. Releases
-list the APK's sha256 and signing certificate digest, and
+Everything else: issues and pull requests are open and welcome.
 [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md) says plainly what the chain
 does and does not prove.
 
-**What that hash actually proves today: not much on its own.** It is the
-same developer publishing a hash next to the binary they built it from, so
-it tells you the file you downloaded matches the file GitHub is serving,
-nothing about whether it matches this source tree. `tools/release-android.sh`
-never runs in CI, only on the machine that signs the release, so there is
-no independent build to compare against yet. A reproducible build (CI
-builds the same commit unsigned and publishes that sha256 alongside the
-signed release, so anyone can diff the two) would close that gap; it is not
-built yet. Until it is, verifying the APK against this source means reading
-the source and building it yourself.
+## License
 
 [GPL-3.0-or-later](LICENSE). You can use, study, change and share it. If you distribute a copy or a modified version, it has to stay under the GPL and come with its source. Releases up to v0.4.3 were under MIT.
 
