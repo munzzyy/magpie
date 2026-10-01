@@ -360,6 +360,29 @@ async function main() {
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 4"), "entries after reload");
     check("reload: vault persists and reopens", true);
 
+    // ------------------------------------------- web share-target pickup
+    // The worker parks shared files in a cache and an oversized one as a bodiless 413.
+    await c.evalJs(`(async () => {
+      const cache = await caches.open("magpie-share");
+      await cache.put("/share-incoming-0", new Response(null, { status: 413, headers: { "content-type": "video/mp4" } }));
+      await cache.put("/share-incoming-1", new Response(new Blob(["shared through the share sheet"]), { headers: { "content-type": "text/plain" } }));
+      return "ok";
+    })()`, true);
+    await c.send("Page.navigate", { url: BASE + "/?share-target=1" });
+    await waitFor(() => c.evalJs("!!window.__magpieApi && __magpieApi.state.screen === 'lock'"), "lock after a share-target launch");
+    check("share target: both parked items are queued, unread", JSON.stringify(await c.evalJs("__magpieApi.state.queued")) === '["too-big","blob"]');
+    await c.evalJs(`(() => {
+      document.getElementById("lock-pass").value = ${JSON.stringify(PASS)};
+      document.getElementById("lock-form").requestSubmit();
+    })()`);
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add' && !document.getElementById('attach-name').hidden"), "shared file staged");
+    check("share target: the small file is staged from its blob", (await c.evalJs("document.getElementById('attach-name').textContent")).includes("(1 KB)"));
+    const shareToast = await c.evalJs("document.getElementById('toast').textContent");
+    check("share target: the oversized one is refused, not read", shareToast.includes("is too big to attach"), shareToast);
+    check("share target: the parking cache is emptied", (await c.evalJs("caches.open('magpie-share').then((x) => x.keys()).then((k) => k.length)", true)) === 0);
+    await c.evalJs("document.getElementById('btn-add-cancel').click(); 'ok'");
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 4"), "timeline after the share target");
+
     // -------------------------------------------------- sealed backup out
     const backupB64 = await c.evalJs(
       `(async () => { const bytes = await __magpieApi.vault.exportBackup();
@@ -431,6 +454,26 @@ async function main() {
     writeFileSync(chainInvalidFile, mutated.chainInvalid);
     const hollowedFile = path.join(ROOT, "test", "fixtures", "backup-hollowed.magpiebackup");
     writeFileSync(hollowedFile, mutated.hollowed);
+
+    // ------------------------- a pick of several large files, read lazily
+    // Only the staged file is read; the rest wait as File objects, never bytes.
+    const MB = 1024 * 1024;
+    const bigPick = ["big49-a.bin", "big49-b.bin", "big60.bin", "big49-c.bin"].map((n) => path.join(ROOT, "test", "fixtures", n));
+    for (const f of bigPick) writeFileSync(f, Buffer.alloc((f.includes("big60") ? 60 : 49) * MB, 7));
+    await c.evalJs("document.getElementById('btn-add').click(); 'ok'");
+    await waitFor(() => c.evalJs("__magpieApi.state.screen === 'add'"), "add screen for the big pick");
+    const { root: rootPick } = (await c.send("DOM.getDocument")).result;
+    const inputPick = (await c.send("DOM.querySelector", { nodeId: rootPick.nodeId, selector: "#attach-input" })).result;
+    await c.send("DOM.setFileInputFiles", { nodeId: inputPick.nodeId, files: bigPick });
+    await waitFor(() => c.evalJs("!document.getElementById('attach-name').hidden"), "first big file staged");
+    check("big pick: the first file is staged", (await c.evalJs("document.getElementById('attach-name').textContent")).includes("big49-a.bin"));
+    const queued = await c.evalJs("__magpieApi.state.queued");
+    check("big pick: the other two wait as File objects, unread", JSON.stringify(queued) === '["file","file"]', JSON.stringify(queued));
+    const pickToast = await c.evalJs("document.getElementById('toast').textContent");
+    check("big pick: the 60 MB file is refused by name", pickToast.includes("big60.bin is too big to attach; the limit is 50 MB."), pickToast);
+    check("big pick: and the same toast says two more are waiting", pickToast.includes("2 more"), pickToast);
+    await c.evalJs("document.getElementById('btn-add-cancel').click(); 'ok'");
+    for (const f of bigPick) rmSync(f, { force: true });
 
     // ------------------------------------------------------------- wipe
     await c.evalJs(`(() => {

@@ -144,6 +144,15 @@ async function main() {
     await c.evalJs("document.getElementById('btn-export-back').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "back on the timeline");
 
+    // The wrapper answers a shared file over the cap with 413 before reading it.
+    await c.evalJs("__magpieShared(['big']); 'ok'");
+    const bigToast = await waitFor(
+      () => c.evalJs("(t => /too big|Could not read/.test(t) && t)(document.getElementById('toast').textContent)"),
+      "too-big toast",
+    );
+    check("share-in: an oversized share is refused as too big", /is too big to attach; the limit is 50 MB\./.test(bigToast) && !bigToast.includes("Could not read"), bigToast);
+    check("share-in: and nothing is staged or chained", (await c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 1")) === true);
+
     // No target: a main-frame https tap is what shouldOverrideUrlLoading hands to the browser.
     await c.evalJs("document.querySelector('#screen-timeline details.danger').open = true; 'ok'");
     const about = await c.evalJs(`(() => {

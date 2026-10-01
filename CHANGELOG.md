@@ -27,6 +27,12 @@
   export is listed as not covered by the chain, an attachment renamed after
   the export fails, and `--extends` checks the older export on its own too.
   One entry reads "1 entry verifies".
+- Picking several files at once, or sharing them in, read every one of
+  them into memory before the 50 MB cap could turn any away, so a few big
+  videos could take the app down. Only the file going into the entry on
+  screen is read now, and a file over the cap is refused by name before
+  anything reads it. On Android a shared file over the cap used to end in
+  "Could not read the shared file."; it says the file is too big now.
 
 ## 0.5.1
 

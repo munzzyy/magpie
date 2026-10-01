@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.ValueCallback
@@ -22,7 +23,10 @@ import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FilterInputStream
+import java.io.InputStream
 import java.security.SecureRandom
 
 // One screen: the bundled web app in a WebView on the fixed asset origin.
@@ -34,6 +38,9 @@ class MainActivity : ComponentActivity() {
         const val ASSET_HOST = "appassets.androidplatform.net"
         const val START_URL = "https://$ASSET_HOST/index.html"
         const val AUTHORITY = "io.github.munzzyy.magpie.files"
+
+        // Same cap as MAX_ATTACH_BYTES in app/js/main.js.
+        const val MAX_ATTACH_BYTES = 50L * 1024 * 1024
     }
 
     lateinit var webView: WebView
@@ -256,21 +263,64 @@ class MainActivity : ComponentActivity() {
     }
 
     // One-shot: a successful serve removes the entry, and a served capture
-    // file is read fully then deleted, so no plaintext photo outlives its
-    // hand-off into the encrypted journal.
+    // file is deleted once the page has read it, so no plaintext photo
+    // outlives its hand-off into the encrypted journal.
+    // Over the cap: 413 unread. Size unknown: cut one byte past the cap, which the page refuses too.
     private fun serveShared(path: String): WebResourceResponse? {
         val idx = shared.indexOfFirst { it.first == path }
         if (idx == -1) return null
         val (_, uri) = shared[idx]
         return runCatching {
             val mime = contentResolver.getType(uri) ?: "application/octet-stream"
-            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
-            shared.removeAt(idx)
-            if (uri.authority == AUTHORITY) {
-                runCatching { File(cacheDir, "capture").deleteRecursively() }
+            val size = sizeOf(uri)
+            if (size != null && size > MAX_ATTACH_BYTES) {
+                shared.removeAt(idx)
+                dropCapture(uri)
+                return WebResourceResponse(mime, null, 413, "Payload Too Large", emptyMap(), ByteArrayInputStream(ByteArray(0)))
             }
-            WebResourceResponse(mime, null, bytes.inputStream())
+            val input = contentResolver.openInputStream(uri) ?: return null
+            shared.removeAt(idx)
+            WebResourceResponse(mime, null, CappedStream(input, MAX_ATTACH_BYTES + 1) { dropCapture(uri) })
         }.getOrNull()
+    }
+
+    private fun sizeOf(uri: Uri): Long? =
+        runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+            }
+        }.getOrNull()
+            ?: runCatching {
+                contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length.takeIf { n -> n >= 0 } }
+            }.getOrNull()
+
+    private fun dropCapture(uri: Uri) {
+        if (uri.authority == AUTHORITY) runCatching { File(cacheDir, "capture").deleteRecursively() }
+    }
+
+    private class CappedStream(input: InputStream, private var left: Long, private val onClose: () -> Unit) :
+        FilterInputStream(input) {
+        override fun read(): Int {
+            if (left <= 0) return -1
+            val b = super.read()
+            if (b >= 0) left--
+            return b
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (left <= 0) return -1
+            val n = super.read(b, off, minOf(len.toLong(), left).toInt())
+            if (n > 0) left -= n
+            return n
+        }
+
+        override fun close() {
+            try {
+                super.close()
+            } finally {
+                onClose()
+            }
+        }
     }
 
 

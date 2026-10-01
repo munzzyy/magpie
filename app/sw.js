@@ -3,6 +3,8 @@
 
 const VERSION = "magpie-v0.5.1";
 const SHARE_CACHE = "magpie-share";
+// Same cap as MAX_ATTACH_BYTES in js/main.js.
+const MAX_ATTACH_BYTES = 50 * 1024 * 1024;
 
 const PRECACHE = [
   "/",
@@ -67,14 +69,16 @@ self.addEventListener("fetch", (event) => {
         }
         try {
           const form = await event.request.formData();
-          const files = form.getAll("evidence").filter((f) => f && f.size && f.size <= 200 * 1024 * 1024);
+          const files = form.getAll("evidence").filter((f) => f && f.size);
           const cache = await caches.open(SHARE_CACHE);
           for (const req of await cache.keys()) await cache.delete(req);
           let n = 0;
           for (const file of files.slice(0, 50)) {
+            const headers = { "content-type": file.type || "application/octet-stream" };
+            // An oversized file parks as a bodiless 413 so the app can say so.
             await cache.put(
               `/share-incoming-${n++}`,
-              new Response(file, { headers: { "content-type": file.type || "application/octet-stream" } })
+              file.size > MAX_ATTACH_BYTES ? new Response(null, { status: 413, headers }) : new Response(file, { headers })
             );
           }
         } catch {

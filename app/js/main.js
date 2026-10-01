@@ -37,8 +37,7 @@ const announce = (msg) => {
 const SCREENS = ["setup", "lock", "timeline", "add", "entry", "export"];
 const OPEN_SCREENS = new Set(["timeline", "add", "entry", "export"]);
 
-// Files shared or captured before there was an unlocked vault to put them
-// in; consumed one per new entry.
+// Files waiting for an entry each: wrapper tokens or { blob, mime, name }, read only on their turn.
 let pendingShared = [];
 let pendingAttach = null;
 let exportBlob = null;
@@ -62,6 +61,7 @@ const app = {
       locked: vault.isLocked(),
       wrapper: isWrapper(),
       pendingShared: pendingShared.length,
+      queued: pendingShared.map((x) => (typeof x === "string" ? "token" : x.blob instanceof File ? "file" : x.blob ? "blob" : "too-big")),
       version: VERSION,
     };
   },
@@ -274,36 +274,53 @@ async function saveEntry(ev) {
   }
 }
 
-// Queue items are wrapper tokens (strings) or web share-target payloads
-// ({ bytes, mime, name }); either way, one pending file per new entry.
-async function nextSharedIntoAdd() {
-  const item = pendingShared.shift();
-  try {
-    let bytes;
-    let mime;
-    let name;
-    if (typeof item === "string") {
-      const res = await fetch(`/shared/${item}`);
-      if (!res.ok) throw new Error(String(res.status));
-      bytes = new Uint8Array(await res.arrayBuffer());
-      mime = res.headers.get("content-type") || "application/octet-stream";
-    } else {
-      ({ bytes, mime, name } = item);
+const sharedName = (mime) => `shared.${mime.startsWith("image/") ? mime.split("/")[1].replace("jpeg", "jpg") : "bin"}`;
+const tooBigText = (name) => t("{name} is too big to attach; the limit is {mb} MB.", { name, mb: MAX_ATTACH_MB });
+
+// Too big is decided before any body is read: the wrapper answers 413, a Blob knows its size.
+async function readQueued(item) {
+  if (typeof item === "string") {
+    const res = await fetch(`/shared/${item}`);
+    const mime = res.headers.get("content-type") || "application/octet-stream";
+    const name = sharedName(mime);
+    if (res.status === 413 || Number(res.headers.get("content-length")) > MAX_ATTACH_BYTES) {
+      res.body?.cancel().catch(() => {});
+      return { tooBig: true, name };
     }
-    if (!name) {
-      const ext = mime.startsWith("image/") ? mime.split("/")[1].replace("jpeg", "jpg") : "bin";
-      name = `shared.${ext}`;
-    }
-    show("add");
-    setPendingAttach(bytes, name, mime);
-    if (pendingShared.length) {
-      toast(t("{count} more shared file(s) waiting; each becomes its own entry.", { count: pendingShared.length }));
-    }
-  } catch (err) {
-    __magpieErrors.push(`shared: ${err}`);
-    toast(t("Could not read the shared file."));
-    show("timeline");
+    if (!res.ok) throw new Error(String(res.status));
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return bytes.length > MAX_ATTACH_BYTES ? { tooBig: true, name } : { bytes, mime, name };
   }
+  const name = item.name || sharedName(item.mime);
+  if (!item.blob || item.blob.size > MAX_ATTACH_BYTES) return { tooBig: true, name };
+  return { bytes: new Uint8Array(await item.blob.arrayBuffer()), mime: item.mime, name };
+}
+
+// Files turned away on the way share the one toast, so no refusal gets overwritten.
+async function nextSharedIntoAdd() {
+  const notes = [];
+  while (pendingShared.length) {
+    try {
+      const got = await readQueued(pendingShared.shift());
+      if (got.tooBig) {
+        notes.push(tooBigText(got.name));
+        continue;
+      }
+      show("add");
+      setPendingAttach(got.bytes, got.name, got.mime);
+      if (pendingShared.length) {
+        notes.push(t("{count} more shared file(s) waiting; each becomes its own entry.", { count: pendingShared.length }));
+      }
+      if (notes.length) toast(notes.join(" "));
+      return;
+    } catch (err) {
+      __magpieErrors.push(`shared: ${err}`);
+      notes.push(t("Could not read the shared file."));
+    }
+  }
+  if (notes.length) toast(notes.join(" "));
+  await renderTimeline();
+  show("timeline");
 }
 
 // ---------------------------------------------------------------- export
@@ -500,23 +517,22 @@ function wireEvents() {
     const picked = [...$("attach-input").files];
     $("attach-input").value = "";
     if (!picked.length) return;
+    const notes = picked.filter((f) => f.size > MAX_ATTACH_BYTES).map((f) => tooBigText(f.name));
     const files = picked.filter((f) => f.size <= MAX_ATTACH_BYTES);
-    if (files.length < picked.length) {
-      const big = picked.find((f) => f.size > MAX_ATTACH_BYTES);
-      toast(t("{name} is too big to attach; the limit is {mb} MB.", { name: big.name, mb: MAX_ATTACH_MB }));
+    if (!files.length) {
+      toast(notes.join(" "));
+      return;
     }
-    if (!files.length) return;
     const [first, ...rest] = files;
     // One pick, N chained entries: the first file stages this entry like
     // always, and every other file joins the same queue a shared-in file
-    // uses, so each becomes its own entry after this one is saved.
-    for (const f of rest) {
-      pendingShared.push({ bytes: new Uint8Array(await f.arrayBuffer()), mime: f.type || "application/octet-stream", name: f.name });
-    }
+    // uses, as a File, so each becomes its own entry after this one is saved.
+    for (const f of rest) pendingShared.push({ blob: f, mime: f.type || "application/octet-stream", name: f.name });
     setPendingAttach(new Uint8Array(await first.arrayBuffer()), first.name, first.type || "application/octet-stream");
     if (rest.length) {
-      toast(t("{count} more shared file(s) waiting; each becomes its own entry.", { count: rest.length }));
+      notes.push(t("{count} more shared file(s) waiting; each becomes its own entry.", { count: rest.length }));
     }
+    if (notes.length) toast(notes.join(" "));
   });
   $("btn-camera").addEventListener("click", () => capturePhoto());
 
@@ -717,10 +733,13 @@ async function boot() {
       return;
     }
     try {
-      const res = await fetch(`/shared/${token}`);
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      const got = await readQueued(token);
+      if (got.tooBig) {
+        toast(tooBigText("photo.jpg"));
+        return;
+      }
       show("add");
-      setPendingAttach(bytes, "photo.jpg", res.headers.get("content-type") || "image/jpeg");
+      setPendingAttach(got.bytes, "photo.jpg", got.mime === "application/octet-stream" ? "image/jpeg" : got.mime);
     } catch (err) {
       __magpieErrors.push(`capture: ${err}`);
     }
@@ -738,10 +757,9 @@ async function boot() {
         if (isPickup) {
           const res = await cache.match(req);
           if (res) {
-            pendingShared.push({
-              bytes: new Uint8Array(await res.arrayBuffer()),
-              mime: res.headers.get("content-type") || "application/octet-stream",
-            });
+            const mime = res.headers.get("content-type") || "application/octet-stream";
+            // 413 is the worker's marker for a file over the cap; it parks no body.
+            pendingShared.push(res.status === 413 ? { mime } : { blob: await res.blob(), mime });
           }
         }
         await cache.delete(req);

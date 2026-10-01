@@ -26,6 +26,11 @@ createServer(async (req, res) => {
     let file = decodeURIComponent(url.pathname);
     if (file === "/") file = "/index.html";
     // Test stand-in for the wrapper's share hand-off origin path.
+    if (file === "/shared/big") {
+      res.writeHead(413, "Payload Too Large", { "content-type": "video/mp4", "cache-control": "no-store" });
+      res.end();
+      return;
+    }
     if (file.startsWith("/shared/")) {
       const body = Buffer.alloc(2048, "shared-evidence-bytes ");
       res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
@@ -44,5 +49,5 @@ createServer(async (req, res) => {
     res.writeHead(404).end("not found");
   }
 }).listen(PORT, "127.0.0.1", () => {
-  console.log(`sepia dev server on http://127.0.0.1:${PORT}`);
+  console.log(`magpie dev server on http://127.0.0.1:${PORT}`);
 });
