@@ -9,10 +9,25 @@ import android.webkit.JavascriptInterface
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
+import java.io.FileOutputStream
+import java.security.SecureRandom
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.concurrent.thread
 
 // The page's window into the platform. Only bundled app code can call this:
 // the WebView never navigates off the asset origin.
 class MagpieBridge(private val activity: MainActivity) {
+
+    companion object {
+        // platform.js sends 768 KiB of bytes per call, which is exactly this much base64.
+        const val MAX_CHUNK_CHARS = 1024 * 1024
+    }
+
+    // An export on its way out: base64 chunks append to a cache file, so no
+    // ByteArray or String the size of the export exists on this side.
+    private class Out(val file: File, val mime: String, val name: String, val share: Boolean)
+
+    private val outs = ConcurrentHashMap<String, Out>()
 
     @JavascriptInterface
     fun platform(): String = "android"
@@ -36,58 +51,102 @@ class MagpieBridge(private val activity: MainActivity) {
         activity.runOnUiThread { activity.startCapture() }
     }
 
+    // mode is "share" (system share sheet) or "save" (Downloads, or the picker on Android 9).
     @JavascriptInterface
-    fun shareFile(b64: String, mime: String, name: String) {
-        val bytes = runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull() ?: return
-        val uri = runCatching {
+    fun beginOut(name: String, mime: String, mode: String): String {
+        if (mode != "share" && mode != "save") return ""
+        return runCatching {
+            dropOuts()
             val dir = File(activity.cacheDir, "shared_out").apply { mkdirs() }
-            dir.listFiles()?.forEach { it.delete() }
-            val file = File(dir, sanitize(name))
-            file.writeBytes(bytes)
-            FileProvider.getUriForFile(activity, MainActivity.AUTHORITY, file)
-        }.getOrNull()
-        activity.runOnUiThread {
-            if (uri == null) {
-                Toast.makeText(activity, activity.getString(R.string.save_failed), Toast.LENGTH_SHORT).show()
-                return@runOnUiThread
+            dir.listFiles()?.forEach { it.deleteRecursively() }
+            val safe = sanitize(name)
+            val file = File(dir, safe)
+            FileOutputStream(file).close()
+            val raw = ByteArray(16)
+            SecureRandom().nextBytes(raw)
+            val id = raw.joinToString("") { "%02x".format(it) }
+            outs[id] = Out(file, mime, safe, mode == "share")
+            id
+        }.getOrDefault("")
+    }
+
+    @JavascriptInterface
+    fun appendOut(id: String, b64: String): Boolean {
+        val out = outs[id] ?: return false
+        if (b64.length > MAX_CHUNK_CHARS || b64.length % 4 != 0) {
+            abortOut(id)
+            return false
+        }
+        val ok = runCatching {
+            FileOutputStream(out.file, true).use { it.write(Base64.decode(b64, Base64.NO_WRAP)) }
+        }.isSuccess
+        if (!ok) abortOut(id)
+        return ok
+    }
+
+    @JavascriptInterface
+    fun abortOut(id: String) {
+        outs.remove(id)?.file?.delete()
+    }
+
+    // The outcome comes back on __magpieOutDone(id, "ok" | "cancelled" | "failed").
+    @JavascriptInterface
+    fun finishOut(id: String) {
+        val out = outs.remove(id) ?: return activity.reportOut(id, "failed")
+        when {
+            out.share -> activity.runOnUiThread { share(id, out) }
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ->
+                activity.runOnUiThread { activity.saveWithPicker(out.file, out.mime, out.name) { activity.reportOut(id, it) } }
+            else -> thread {
+                val ok = saveToDownloads(out)
+                out.file.delete()
+                if (ok) {
+                    activity.runOnUiThread {
+                        Toast.makeText(activity, activity.getString(R.string.saved_to_downloads), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                activity.reportOut(id, if (ok) "ok" else "failed")
             }
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = mime
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            runCatching { activity.startActivity(Intent.createChooser(send, null)) }
         }
     }
 
-    // Exports land in Downloads, where a zip belongs.
-    @JavascriptInterface
-    fun saveFile(b64: String, mime: String, name: String) {
-        val bytes = runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull() ?: return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            activity.runOnUiThread { activity.saveWithPicker(bytes, mime, sanitize(name)) }
-            return
-        }
+    fun dropOuts() {
+        for (id in outs.keys.toList()) abortOut(id)
+    }
+
+    // The file stays in cache for the receiving app to read; the next export or the next launch clears it.
+    private fun share(id: String, out: Out) {
+        val ok = runCatching {
+            val uri = FileProvider.getUriForFile(activity, MainActivity.AUTHORITY, out.file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = out.mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            activity.startActivity(Intent.createChooser(send, null))
+        }.isSuccess
+        if (!ok) out.file.delete()
+        activity.reportOut(id, if (ok) "ok" else "failed")
+    }
+
+    private fun saveToDownloads(out: Out): Boolean = runCatching {
         val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, sanitize(name))
-            put(MediaStore.Downloads.MIME_TYPE, mime)
+            put(MediaStore.Downloads.DISPLAY_NAME, out.name)
+            put(MediaStore.Downloads.MIME_TYPE, out.mime)
+            put(MediaStore.Downloads.IS_PENDING, 1)
         }
         val resolver = activity.contentResolver
-        val ok = runCatching {
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: return@runCatching false
-            resolver.openOutputStream(uri)?.use { it.write(bytes) } ?: return@runCatching false
-            true
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@runCatching false
+        val copied = runCatching {
+            resolver.openOutputStream(uri)?.use { sink -> out.file.inputStream().use { it.copyTo(sink, 1 shl 20) } } != null
         }.getOrDefault(false)
-        activity.runOnUiThread {
-            Toast.makeText(
-                activity,
-                if (ok) activity.getString(R.string.saved_to_downloads)
-                else activity.getString(R.string.save_failed),
-                Toast.LENGTH_SHORT,
-            ).show()
+        if (!copied) {
+            resolver.delete(uri, null, null)
+            return@runCatching false
         }
-    }
+        resolver.update(uri, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
+        true
+    }.getOrDefault(false)
 
     private fun sanitize(name: String): String {
         val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_").take(64)

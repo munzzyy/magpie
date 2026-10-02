@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -28,6 +29,7 @@ import java.io.File
 import java.io.FilterInputStream
 import java.io.InputStream
 import java.security.SecureRandom
+import kotlin.concurrent.thread
 
 // One screen: the bundled web app in a WebView on the fixed asset origin.
 // The APK requests no permissions at all; photos come back from the system
@@ -46,6 +48,8 @@ class MainActivity : ComponentActivity() {
     lateinit var webView: WebView
         private set
 
+    private lateinit var root: FrameLayout
+    private lateinit var bridge: MagpieBridge
     private lateinit var assetLoader: WebViewAssetLoader
 
     // (token, uri) pairs for shared-in and captured files, RAM only, each
@@ -79,19 +83,33 @@ class MainActivity : ComponentActivity() {
     }
 
     // Android 9 has no MediaStore write without a storage permission, so a save goes through the system picker there.
-    private var pendingSave: ByteArray? = null
+    private var pendingSave: Pair<File, (String) -> Unit>? = null
 
     private val createDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val bytes = pendingSave
+        val (file, done) = pendingSave ?: return@registerForActivityResult
         pendingSave = null
         val uri = result.data?.data
-        if (result.resultCode != RESULT_OK || uri == null || bytes == null) return@registerForActivityResult
-        val ok = runCatching { contentResolver.openOutputStream(uri)?.use { it.write(bytes) } != null }.getOrDefault(false)
-        Toast.makeText(this, getString(if (ok) R.string.saved else R.string.save_failed), Toast.LENGTH_SHORT).show()
+        if (result.resultCode != RESULT_OK || uri == null) {
+            file.delete()
+            done("cancelled")
+            return@registerForActivityResult
+        }
+        thread {
+            val ok = runCatching {
+                contentResolver.openOutputStream(uri)?.use { sink -> file.inputStream().use { it.copyTo(sink, 1 shl 20) } } != null
+            }.getOrDefault(false)
+            file.delete()
+            if (ok) runOnUiThread { Toast.makeText(this, getString(R.string.saved), Toast.LENGTH_SHORT).show() }
+            done(if (ok) "ok" else "failed")
+        }
     }
 
-    fun saveWithPicker(bytes: ByteArray, mime: String, name: String) {
-        pendingSave = bytes
+    fun saveWithPicker(file: File, mime: String, name: String, done: (String) -> Unit) {
+        pendingSave?.let { (old, oldDone) ->
+            old.delete()
+            oldDone("cancelled")
+        }
+        pendingSave = file to done
         val pick = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = mime
@@ -101,11 +119,19 @@ class MainActivity : ComponentActivity() {
             createDocument.launch(pick)
         } catch (e: ActivityNotFoundException) {
             pendingSave = null
-            Toast.makeText(this, getString(R.string.save_failed), Toast.LENGTH_SHORT).show()
+            file.delete()
+            done("failed")
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    fun reportOut(id: String, status: String) {
+        runOnUiThread {
+            if (::webView.isInitialized) {
+                webView.evaluateJavascript("globalThis.__magpieOutDone && __magpieOutDone(\"$id\", \"$status\")", null)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -115,7 +141,7 @@ class MainActivity : ComponentActivity() {
         if (SystemCheck.blockIfWebViewTooOld(this)) return
 
         webView = WebView(this)
-        val root = FrameLayout(this)
+        root = FrameLayout(this)
         root.addView(
             webView,
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
@@ -140,7 +166,28 @@ class MainActivity : ComponentActivity() {
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
-        with(webView.settings) {
+        bridge = MagpieBridge(this)
+        setUpWebView(webView)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) webView.goBack() else finish()
+            }
+        })
+
+        // Stale capture files from previous sessions have no business
+        // surviving; the journal keeps its own encrypted copies.
+        runCatching { File(cacheDir, "capture").deleteRecursively() }
+        runCatching { File(cacheDir, "shared_out").deleteRecursively() }
+
+        takeShared(intent)
+        webView.loadUrl(START_URL)
+        SystemCheck.noteAndroid9(this)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setUpWebView(view: WebView) {
+        with(view.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = true
@@ -152,9 +199,9 @@ class MainActivity : ComponentActivity() {
             allowUniversalAccessFromFileURLs = false
         }
 
-        webView.addJavascriptInterface(MagpieBridge(this), "MagpieNative")
+        view.addJavascriptInterface(bridge, "MagpieNative")
 
-        webView.webViewClient = object : WebViewClient() {
+        view.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest,
@@ -170,9 +217,14 @@ class MainActivity : ComponentActivity() {
                 }
                 return true
             }
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                replaceWebView(view)
+                return true
+            }
         }
 
-        webView.webChromeClient = object : WebChromeClient() {
+        view.webChromeClient = object : WebChromeClient() {
             override fun onShowFileChooser(
                 webView: WebView,
                 callback: ValueCallback<Array<Uri>>,
@@ -189,21 +241,25 @@ class MainActivity : ComponentActivity() {
                 return true
             }
         }
+    }
 
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (webView.canGoBack()) webView.goBack() else finish()
-            }
-        })
-
-        // Stale capture files from previous sessions have no business
-        // surviving; the journal keeps its own encrypted copies.
-        runCatching { File(cacheDir, "capture").deleteRecursively() }
-        runCatching { File(cacheDir, "shared_out").deleteRecursively() }
-
-        takeShared(intent)
-        webView.loadUrl(START_URL)
-        SystemCheck.noteAndroid9(this)
+    // A renderer killed for memory takes the open page with it, and a WebView
+    // that lost its renderer can't be reused. A fresh one boots locked.
+    private fun replaceWebView(dead: WebView) {
+        if (dead !== webView) return
+        filePathCallback?.onReceiveValue(null)
+        filePathCallback = null
+        bridge.dropOuts()
+        root.removeView(dead)
+        dead.destroy()
+        val fresh = WebView(this)
+        root.addView(
+            fresh,
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
+        webView = fresh
+        setUpWebView(fresh)
+        fresh.loadUrl(START_URL)
     }
 
     override fun onNewIntent(intent: Intent) {

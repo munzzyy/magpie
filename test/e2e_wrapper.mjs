@@ -31,8 +31,27 @@ const BRIDGE_STUB = `window.MagpieNative = {
   sharedTokens: () => JSON.stringify(["e2etoken"]),
   canCapture: () => true,
   capturePhoto: () => { window.__captureAsked = true; },
-  shareFile: (b64, mime, name) => { window.__shared = { size: b64.length, mime, name }; },
-  saveFile: (b64, mime, name) => { window.__saved = { size: b64.length, mime, name }; },
+  // The chunked hand-off: __outStatus decides what the "system" reports back.
+  beginOut: (name, mime, mode) => {
+    const id = "out" + (window.__outN = (window.__outN || 0) + 1);
+    (window.__outs = window.__outs || {})[id] = { name, mime, mode, parts: [], maxChunk: 0 };
+    return id;
+  },
+  appendOut: (id, b64) => {
+    const out = window.__outs[id];
+    out.maxChunk = Math.max(out.maxChunk, b64.length);
+    out.parts.push(atob(b64));
+    return true;
+  },
+  abortOut: (id) => { delete window.__outs[id]; },
+  finishOut: (id) => {
+    const out = window.__outs[id];
+    const bytes = out.parts.join("");
+    const record = { size: bytes.length, mime: out.mime, name: out.name, magic: bytes.slice(0, 2), maxChunk: out.maxChunk };
+    const status = window.__outStatus || "ok";
+    if (status === "ok") window[out.mode === "share" ? "__shared" : "__saved"] = record;
+    setTimeout(() => window.__magpieOutDone(id, status), 50);
+  },
 };`;
 
 async function waitFor(fn, desc, timeout = 20000) {
@@ -140,10 +159,30 @@ async function main() {
 
     await c.evalJs("document.getElementById('btn-export').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'export'"), "export screen");
+
+    // A save the system reports failed, or one backed out of, must not count as exported.
+    await c.evalJs("window.__outStatus = 'failed'; document.getElementById('btn-export-save').click(); 'ok'");
+    const failToast = await waitFor(
+      () => c.evalJs("(t => /Could not hand off/.test(t) && t)(document.getElementById('toast').textContent)"),
+      "hand-off failure toast",
+    );
+    check("share-out: a failed save says so", failToast === "Could not hand off the export.", failToast);
+    await c.evalJs("window.__outStatus = 'cancelled'; document.getElementById('btn-export-save').click(); 'ok'");
+    await waitFor(() => c.evalJs("Object.keys(window.__outs).length === 2"), "the cancelled save handed off");
+    await sleep(300);
+    check(
+      "share-out: neither one anchors the record",
+      (await c.evalJs("__magpieApi.vault.getAnchor().then((a) => a === null)", true)) === true &&
+        (await c.evalJs("document.getElementById('anchor-line').textContent")).startsWith("Not yet anchored"),
+    );
+    await c.evalJs("window.__outStatus = 'ok'; 'ok'");
     await c.evalJs("document.getElementById('btn-export-share').click(); 'ok'");
     await waitFor(() => c.evalJs("!!window.__shared"), "export handed to bridge");
     const out = await c.evalJs("window.__shared");
-    check("share-out: zip reaches the bridge", out.size > 1000 && out.mime === "application/zip" && /^magpie-export-[a-z2-9]{4}\.zip$/.test(out.name), JSON.stringify(out));
+    check("share-out: zip reaches the bridge", out.size > 1000 && out.magic === "PK" && out.mime === "application/zip" && /^magpie-export-[a-z2-9]{4}\.zip$/.test(out.name), JSON.stringify(out));
+    check("share-out: no chunk over 1 MiB of base64", out.maxChunk > 0 && out.maxChunk <= 1024 * 1024, String(out.maxChunk));
+    const anchored = await waitFor(() => c.evalJs("__magpieApi.vault.getAnchor()", true), "anchor after the share");
+    check("share-out: a confirmed hand-off anchors the record", anchored.count === 1 && anchored.method === "export", JSON.stringify(anchored));
 
     await c.evalJs("document.getElementById('btn-export-back').click(); 'ok'");
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "back on the timeline");
@@ -211,7 +250,8 @@ async function main() {
     await fitAt(360, "Verificar");
 
     const errs = await c.evalJs("(__magpieErrors || []).slice(0, 5)");
-    check("console clean", errs.length === 0, JSON.stringify(errs));
+    const planted = "export-save: Error: the export did not reach the system: failed";
+    check("console clean apart from the planted failed save", errs.length === 1 && errs[0] === planted, JSON.stringify(errs));
     c.close();
   } finally {
     chromium.kill();

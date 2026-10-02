@@ -5,7 +5,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { saveOut, shareOut, ExportUnavailableError } from "../app/js/platform.js";
+import { saveOut, shareOut, ExportUnavailableError, HandOffError, OUT_CHUNK_BYTES } from "../app/js/platform.js";
 
 function resetHost() {
   delete globalThis.location;
@@ -75,4 +75,86 @@ test("negative control: bridge object without the scheme is not trusted", async 
   } finally {
     delete globalThis.document;
   }
+});
+
+// Android: a fake MagpieBridge that keeps what appendOut gets and answers
+// finishOut the way MainActivity.reportOut does, a moment later.
+function fakeAndroid({ status = "ok", appendOk = () => true, id = "a1b2" } = {}) {
+  const log = { begun: [], chunks: [], aborted: [], finished: [] };
+  globalThis.MagpieNative = {
+    beginOut: (name, mime, mode) => (log.begun.push({ name, mime, mode }), id),
+    appendOut: (outId, b64) => {
+      assert.equal(outId, id);
+      log.chunks.push(b64);
+      return appendOk(log.chunks.length);
+    },
+    abortOut: (outId) => log.aborted.push(outId),
+    finishOut: (outId) => {
+      log.finished.push(outId);
+      setTimeout(() => globalThis.__magpieOutDone(outId, status), 5);
+    },
+  };
+  return log;
+}
+
+const bigBlob = () => {
+  const bytes = new Uint8Array(OUT_CHUNK_BYTES * 3 + 12345);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 7919) & 0xff;
+  return { blob: new Blob([bytes], { type: "application/zip" }), bytes };
+};
+
+test("Android: saveOut sends the export in slices that reassemble exactly", async () => {
+  const log = fakeAndroid();
+  const { blob, bytes } = bigBlob();
+  assert.equal(await saveOut(blob, "magpie-export-abcd.zip"), "native");
+  assert.deepEqual(log.begun, [{ name: "magpie-export-abcd.zip", mime: "application/zip", mode: "save" }]);
+  assert.equal(log.chunks.length, 4);
+  for (const b64 of log.chunks) {
+    assert.ok(b64.length <= 1024 * 1024, `chunk of ${b64.length} chars`);
+    assert.equal(b64.length % 4, 0);
+  }
+  assert.equal(log.chunks[0].length, 1024 * 1024);
+  assert.deepEqual(Buffer.concat(log.chunks.map((c) => Buffer.from(c, "base64"))), Buffer.from(bytes));
+  assert.deepEqual(log.finished, ["a1b2"]);
+});
+
+test("Android: bytes are sliced in place, with the type passed in", async () => {
+  const log = fakeAndroid();
+  const { bytes } = bigBlob();
+  assert.equal(await saveOut(bytes, "magpie-backup-abcd.magpiebackup", "application/json"), "native");
+  assert.equal(log.begun[0].mime, "application/json");
+  assert.ok(log.chunks.every((c) => c.length <= 1024 * 1024));
+  assert.deepEqual(Buffer.concat(log.chunks.map((c) => Buffer.from(c, "base64"))), Buffer.from(bytes));
+});
+
+test("Android: shareOut asks for the share sheet and reports success once it opened", async () => {
+  const log = fakeAndroid();
+  assert.equal(await shareOut(bigBlob().blob, "x.zip"), true);
+  assert.equal(log.begun[0].mode, "share");
+});
+
+test("negative control: a save the wrapper reports failed rejects, never resolves", async () => {
+  fakeAndroid({ status: "failed" });
+  await assert.rejects(() => saveOut(bigBlob().blob, "x.zip"), HandOffError);
+  fakeAndroid({ status: "failed" });
+  await assert.rejects(() => shareOut(bigBlob().blob, "x.zip"), HandOffError);
+});
+
+test("Android 9: backing out of the save picker is cancelled, not saved", async () => {
+  fakeAndroid({ status: "cancelled" });
+  assert.equal(await saveOut(bigBlob().blob, "x.zip"), "cancelled");
+});
+
+test("negative control: a chunk the wrapper could not write stops the hand-off", async () => {
+  const log = fakeAndroid({ appendOk: (n) => n < 2 });
+  await assert.rejects(() => saveOut(bigBlob().blob, "x.zip"), HandOffError);
+  assert.equal(log.chunks.length, 2);
+  assert.deepEqual(log.aborted, ["a1b2"]);
+  assert.deepEqual(log.finished, []);
+});
+
+test("negative control: a wrapper that refuses to begin gets nothing", async () => {
+  const log = fakeAndroid({ id: "" });
+  await assert.rejects(() => saveOut(bigBlob().blob, "x.zip"), HandOffError);
+  assert.deepEqual(log.chunks, []);
 });

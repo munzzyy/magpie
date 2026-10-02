@@ -40,7 +40,8 @@ const OPEN_SCREENS = new Set(["timeline", "add", "entry", "export"]);
 // Files waiting for an entry each: wrapper tokens or { blob, mime, name }, read only on their turn.
 let pendingShared = [];
 let pendingAttach = null;
-let exportBlob = null;
+let exportZip = null;
+const ZIP = "application/zip";
 let exportState = null;
 let entryUrls = [];
 
@@ -90,7 +91,7 @@ function releaseEntryUrls() {
 function lockNow(message) {
   vault.lock();
   releaseEntryUrls();
-  exportBlob = null;
+  exportZip = null;
   exportState = null;
   pendingAttach = null;
   currentRows = [];
@@ -347,8 +348,9 @@ async function nextSharedIntoAdd() {
 
 async function openExport() {
   try {
+    exportZip = null;
     const { zip, head, count } = await buildExport();
-    exportBlob = new Blob([zip], { type: "application/zip" });
+    exportZip = zip;
     exportState = { head, count };
     $("export-head").textContent = head;
     show("export");
@@ -581,15 +583,16 @@ function wireEvents() {
   $("btn-export").addEventListener("click", openExport);
   $("btn-export-back").addEventListener("click", () => show("timeline"));
   $("btn-export-share").addEventListener("click", async () => {
-    if (!exportBlob) return;
+    if (!exportZip) return;
     try {
-      const ok = await shareOut(exportBlob, exportName());
+      const ok = await shareOut(exportZip, exportName(), ZIP);
       if (ok) {
         await markExported();
         toast(t("Choose where to send it."));
         return;
       }
-      const how = await saveOut(exportBlob, exportName());
+      const how = await saveOut(exportZip, exportName(), ZIP);
+      if (how === "cancelled") return;
       await markExported();
       toast(
         how === "download"
@@ -602,9 +605,10 @@ function wireEvents() {
     }
   });
   $("btn-export-save").addEventListener("click", async () => {
-    if (!exportBlob) return;
+    if (!exportZip) return;
     try {
-      const how = await saveOut(exportBlob, exportName());
+      const how = await saveOut(exportZip, exportName(), ZIP);
+      if (how === "cancelled") return;
       await markExported();
       if (how === "download") toast(t("Downloaded"));
       else if (how === "ios-share") toast(t("Choose where to save it."));
@@ -616,13 +620,10 @@ function wireEvents() {
   $("btn-backup").addEventListener("click", async () => {
     try {
       const bytes = await vault.exportBackup();
-      const blob = new Blob([bytes], { type: "application/json" });
-      const how = await saveOut(blob, backupName());
-      toast(
-        how === "download"
-          ? t("Sealed backup downloaded. It is safe to park anywhere; only your passphrase opens it.")
-          : t("Choose where to save your sealed backup."),
-      );
+      const how = await saveOut(bytes, backupName(), "application/json");
+      // On Android the wrapper says where the file went.
+      if (how === "download") toast(t("Sealed backup downloaded. It is safe to park anywhere; only your passphrase opens it."));
+      else if (how === "ios-share") toast(t("Choose where to save your sealed backup."));
     } catch (err) {
       __magpieErrors.push(`backup: ${err}`);
       if (err instanceof vault.LockedError) lockNow();

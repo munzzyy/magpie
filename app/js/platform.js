@@ -37,27 +37,70 @@ export class ExportUnavailableError extends Error {
   }
 }
 
-async function postToIOS(bridge, blob, name) {
-  bridge.postMessage({
-    name,
-    mime: blob.type || "application/octet-stream",
-    b64: toBase64(new Uint8Array(await blob.arrayBuffer())),
-  });
+// Android takes an export in slices: 768 KiB of bytes is exactly 1 MiB of
+// base64, the most MagpieBridge.appendOut accepts in one call.
+export const OUT_CHUNK_BYTES = 768 * 1024;
+
+export class HandOffError extends Error {
+  constructor(why) {
+    super(`the export did not reach the system: ${why}`);
+  }
 }
 
-export async function shareOut(blob, name) {
+const outWaiting = new Map();
+globalThis.__magpieOutDone = (id, status) => {
+  const resolve = outWaiting.get(String(id));
+  outWaiting.delete(String(id));
+  if (resolve) resolve(String(status));
+};
+
+// An export is a Blob or bytes. Android slices bytes in place: WebView caps Blob storage, and a second export-sized Blob came back unreadable.
+const sizeOf = (data) => (data instanceof Blob ? data.size : data.length);
+const asBlob = (data, type) => (data instanceof Blob ? data : new Blob([data], { type }));
+const bytesOf = async (data, at = 0, end = sizeOf(data)) =>
+  data instanceof Blob ? new Uint8Array(await data.slice(at, end).arrayBuffer()) : data.subarray(at, end);
+
+// Resolves "ok" or "cancelled" once the wrapper says the file landed or the
+// user backed out of the picker; anything else rejects.
+async function handOff(data, name, type, mode) {
+  const bridge = native();
+  const id = bridge.beginOut(name, type, mode);
+  if (!id) throw new HandOffError("refused");
+  try {
+    for (let at = 0; at < sizeOf(data); at += OUT_CHUNK_BYTES) {
+      if (!bridge.appendOut(id, toBase64(await bytesOf(data, at, at + OUT_CHUNK_BYTES)))) throw new HandOffError("write failed");
+    }
+  } catch (err) {
+    try {
+      bridge.abortOut(id);
+    } catch {}
+    throw err;
+  }
+  const status = await new Promise((resolve) => {
+    outWaiting.set(id, resolve);
+    bridge.finishOut(id);
+  });
+  if (status !== "ok" && status !== "cancelled") throw new HandOffError(status);
+  return status;
+}
+
+async function postToIOS(bridge, data, name, type) {
+  bridge.postMessage({ name, mime: type, b64: toBase64(await bytesOf(data)) });
+}
+
+export async function shareOut(data, name, type = data.type || "application/octet-stream") {
   if (native()) {
-    native().shareFile(toBase64(new Uint8Array(await blob.arrayBuffer())), blob.type, name);
+    await handOff(data, name, type, "share");
     return true;
   }
   const bridge = iosSaveBridge();
   if (bridge) {
-    await postToIOS(bridge, blob, name);
+    await postToIOS(bridge, data, name, type);
     return true;
   }
   if (isIOSWrapped()) return false;
   if (navigator.canShare) {
-    const file = new File([blob], name, { type: blob.type });
+    const file = new File([data], name, { type });
     if (navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file] });
@@ -70,18 +113,19 @@ export async function shareOut(blob, name) {
   return false;
 }
 
-export async function saveOut(blob, name) {
+// "native" and "ios-share" mean the file was handed off, "cancelled" that the
+// user backed out of Android 9's save picker, "download" a browser download.
+export async function saveOut(data, name, type = data.type || "application/octet-stream") {
   if (native()) {
-    native().saveFile(toBase64(new Uint8Array(await blob.arrayBuffer())), blob.type, name);
-    return "native";
+    return (await handOff(data, name, type, "save")) === "ok" ? "native" : "cancelled";
   }
   const bridge = iosSaveBridge();
   if (bridge) {
-    await postToIOS(bridge, blob, name);
+    await postToIOS(bridge, data, name, type);
     return "ios-share";
   }
   if (isIOSWrapped()) throw new ExportUnavailableError();
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(asBlob(data, type));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;

@@ -47,6 +47,18 @@
   the timeline follow the language picked in Settings instead of the
   browser's, and switching language redraws the timeline. The lock
   button's tooltip is translated too.
+- On Android, exporting a journal that held a single video near the 50 MB
+  limit, or a sealed backup from about 30 MB, ran the app out of memory on
+  the way out. No file landed and no error showed, yet the timeline said
+  "Exported today" and "Pinned through entry 1". The export now goes to
+  Android in slices of under 1 MB and is written straight to a file, so a
+  journal of four such videos (about 205 MB) saves and shares on a test
+  phone with a 192 MB app memory limit. An export only counts as done once
+  Android says the file landed, a failed save says so, and backing out of
+  the save picker on Android 9 leaves the record unpinned. The iOS path
+  still hands the export over in one piece and was not measured.
+- If Android kills the page's renderer, say for memory, Magpie comes back on
+  the lock screen instead of closing.
 
 ## 0.5.1
 

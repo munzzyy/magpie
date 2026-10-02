@@ -48,6 +48,6 @@ test("a share into a blocked activity doesn't touch the missing WebView", () => 
 
 test("Android 9 saves through the system picker, never MediaStore.Downloads", () => {
   const src = read(KT + "MagpieBridge.kt");
-  const pick = src.search(/SDK_INT < Build\.VERSION_CODES\.Q\) \{\s*activity\.runOnUiThread \{ activity\.saveWithPicker\(bytes, mime, sanitize\(name\)\) \}\s*return/);
+  const pick = src.search(/SDK_INT < Build\.VERSION_CODES\.Q ->\s*activity\.runOnUiThread \{ activity\.saveWithPicker\(out\.file, out\.mime, out\.name\)/);
   assert.ok(pick > 0 && pick < src.indexOf("MediaStore.Downloads.EXTERNAL_CONTENT_URI"));
 });

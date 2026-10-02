@@ -61,8 +61,8 @@ touches `ios/Sources` or the parts of `app/` it depends on.
   Safari does not support Web Share Target for installed web apps the way
   Android's intent system does. Open Magpie first and attach from there.
 - **Export goes through a small native bridge, not a bare download link.**
-  Android's `shareFile`/`saveFile` hand bytes to `MagpieBridge`, which opens
-  the system share sheet or writes to Downloads directly. WKWebView cannot
+  On Android the page hands the bytes to `MagpieBridge` in slices, and it
+  opens the system share sheet or writes to Downloads directly. WKWebView cannot
   turn a `blob:` download link into a file on its own, so the iOS wrapper
   registers a `WKScriptMessageHandler` named `save`: the page posts the
   export's bytes, name, and MIME type to it, and the native side writes a
