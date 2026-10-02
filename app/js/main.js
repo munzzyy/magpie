@@ -482,8 +482,7 @@ function wireEvents() {
     $("restore-error").hidden = true;
     if (!file) return;
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const { count } = await vault.restoreBackup(bytes, pass);
+      const { count } = await vault.restoreBackup(file, pass);
       $("restore-pass").value = "";
       $("restore-file").value = "";
       await renderTimeline();
@@ -619,8 +618,8 @@ function wireEvents() {
   });
   $("btn-backup").addEventListener("click", async () => {
     try {
-      const bytes = await vault.exportBackup();
-      const how = await saveOut(bytes, backupName(), "application/json");
+      const parts = await vault.exportBackup();
+      const how = await saveOut(parts, backupName(), "application/json");
       // On Android the wrapper says where the file went.
       if (how === "download") toast(t("Sealed backup downloaded. It is safe to park anywhere; only your passphrase opens it."));
       else if (how === "ios-share") toast(t("Choose where to save your sealed backup."));

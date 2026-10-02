@@ -402,33 +402,84 @@ async function main() {
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline' && document.querySelectorAll('#timeline li').length === 4"), "timeline after the share target");
 
     // -------------------------------------------------- sealed backup out
-    const backupB64 = await c.evalJs(
-      `(async () => { const bytes = await __magpieApi.vault.exportBackup();
+    const backupOut = await c.evalJs(
+      `(async () => { const parts = await __magpieApi.vault.exportBackup();
+        const bytes = new Uint8Array(await new Blob(parts).arrayBuffer());
         let out = ""; for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-        return btoa(out); })()`,
+        return { b64: btoa(out), parts: parts.length, biggest: Math.max(...parts.map((p) => p.length)) }; })()`,
       true,
     );
+    const backupB64 = backupOut.b64;
     const backupBytes = Buffer.from(backupB64, "base64");
     check("backup: bytes produced", backupBytes.length > 100);
     check("backup: title never appears in the sealed backup", !backupBytes.toString("latin1").includes(CANARY_TITLE));
     check("backup: note never appears in the sealed backup", !backupBytes.toString("latin1").includes("CANARY-NOTE-TEXT"));
     check("backup: attachment bytes never appear in the sealed backup", !backupBytes.toString("latin1").includes(CANARY_BYTES));
-    const goodBackup = JSON.parse(backupBytes.toString("utf8"));
-    check("backup: it really is one outer envelope, nothing itemized outside it", (
-      Object.keys(goodBackup).sort().join(",") === "box,format,iters,salt,v" &&
-      typeof goodBackup.box.iv === "string" && typeof goodBackup.box.ct === "string"
-    ), JSON.stringify(Object.keys(goodBackup)));
-    const backupPlain = JSON.stringify(goodBackup);
-    check("backup: no plaintext head hash, entry count, or generated_at sits outside the envelope", (
-      !backupPlain.includes(head) && !backupPlain.includes('"generated_at"') && !backupPlain.includes('"entries"')
+    const headerEnd = backupBytes.indexOf(10);
+    const header = JSON.parse(backupBytes.subarray(0, headerEnd).toString("utf8"));
+    check("backup: v3, and the header holds only what opening it needs", (
+      header.v === 3 && Object.keys(header).sort().join(",") === "check,chunk,format,id,iters,salt,v"
+    ), JSON.stringify(Object.keys(header)));
+    check("backup: no plaintext head hash, entry count, or generated_at sits outside the chunks", (
+      !backupBytes.toString("latin1").includes(head) && !backupBytes.includes('"generated_at"') && !backupBytes.includes('"entries"')
     ));
+    const sealedChunk = header.chunk + 12 + 16;
+    const body = backupBytes.subarray(headerEnd + 1);
+    const chunkCount = Math.ceil(body.length / sealedChunk);
+    check("backup: it spans several chunks, and no part in memory is bigger than one", (
+      chunkCount >= 3 && backupOut.parts === chunkCount + 1 && backupOut.biggest <= sealedChunk
+    ), JSON.stringify({ chunkCount, ...backupOut, b64: undefined }));
     const goodBackupFile = path.join(ROOT, "test", "fixtures", "backup-good.magpiebackup");
     writeFileSync(goodBackupFile, backupBytes);
+
+    // v3 damage: each must read as corrupt, never as a wrong passphrase or a smaller journal.
+    const headerBytes = backupBytes.subarray(0, headerEnd + 1);
+    const chunkAt = (i) => body.subarray(i * sealedChunk, Math.min((i + 1) * sealedChunk, body.length));
+    const droppedLastFile = path.join(ROOT, "test", "fixtures", "backup-v3-dropped-last.magpiebackup");
+    writeFileSync(droppedLastFile, Buffer.concat([headerBytes, body.subarray(0, (chunkCount - 1) * sealedChunk)]));
+    const swappedFile = path.join(ROOT, "test", "fixtures", "backup-v3-swapped.magpiebackup");
+    writeFileSync(swappedFile, Buffer.concat([headerBytes, chunkAt(1), chunkAt(0), body.subarray(2 * sealedChunk)]));
+    const flipped = Buffer.from(backupBytes);
+    flipped[headerEnd + 1 + sealedChunk + 100] ^= 0x01;
+    const flippedFile = path.join(ROOT, "test", "fixtures", "backup-v3-flipped.magpiebackup");
+    writeFileSync(flippedFile, flipped);
+
+    // A v2 backup, as 0.4.0 to 0.5.1 wrote them, built here from the vault's own records; restore must keep taking those.
+    const goodV2 = JSON.parse(await c.evalJs(
+      `(async () => {
+        const { deriveKey, seal } = await import("/js/cryptobox.js");
+        const toB64 = (b) => { let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+        const boxOut = (b) => ({ iv: toB64(b.iv), ct: toB64(b.ct) });
+        const db = await new Promise((res, rej) => { const r = indexedDB.open("magpie"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+        const rows = (store) => new Promise((res, rej) => {
+          const out = [];
+          const r = db.transaction(store).objectStore(store).openCursor();
+          r.onsuccess = () => { const cur = r.result; if (cur) { out.push({ seq: cur.key, value: cur.value }); cur.continue(); } else res(out); };
+          r.onerror = () => rej(r.error);
+        });
+        const meta = Object.fromEntries((await rows("meta")).map((r) => [r.seq, r.value]));
+        const inner = {
+          kdf: { check: boxOut(meta.kdf.check) },
+          state: boxOut(meta.state),
+          anchor: meta.anchor ? boxOut(meta.anchor) : null,
+          entries: (await rows("entries")).map(({ seq, value }) => ({ seq, hash: value.hash, box: boxOut(value.box) })),
+          files: (await rows("files")).map(({ seq, value }) => ({ seq, box: boxOut(value) })),
+          generated_at: new Date().toISOString(),
+        };
+        db.close();
+        const k = await deriveKey(${JSON.stringify(PASS)}, meta.kdf.salt, meta.kdf.iters);
+        const outer = await seal(k, new TextEncoder().encode(JSON.stringify(inner)), "backup");
+        return JSON.stringify({ format: "magpie-backup", v: 2, salt: toB64(meta.kdf.salt), iters: meta.kdf.iters, box: boxOut(outer) });
+      })()`,
+      true,
+    ));
+    const goodV2File = path.join(ROOT, "test", "fixtures", "backup-v2-good.magpiebackup");
+    writeFileSync(goodV2File, JSON.stringify(goodV2));
 
     // Outer-envelope tamper: flip a character inside the sealed ciphertext
     // itself. This is what "attack the envelope, not a record inside it"
     // means now that there are no records visible from outside the box.
-    const outerTampered = { ...goodBackup, box: { ...goodBackup.box, ct: goodBackup.box.ct.slice(0, -4) + (goodBackup.box.ct.slice(-4) === "AAAA" ? "BBBB" : "AAAA") } };
+    const outerTampered = { ...goodV2, box: { ...goodV2.box, ct: goodV2.box.ct.slice(0, -4) + (goodV2.box.ct.slice(-4) === "AAAA" ? "BBBB" : "AAAA") } };
     const outerTamperedFile = path.join(ROOT, "test", "fixtures", "backup-outer-tampered.magpiebackup");
     writeFileSync(outerTamperedFile, JSON.stringify(outerTampered));
 
@@ -449,7 +500,7 @@ async function main() {
         const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
         const boxIn = (o) => ({ iv: fromB64(o.iv), ct: fromB64(o.ct) });
         const boxOut = (b) => ({ iv: toB64(b.iv), ct: toB64(b.ct) });
-        const good = ${JSON.stringify(goodBackup)};
+        const good = ${JSON.stringify(goodV2)};
         const salt = fromB64(good.salt);
         const k = await deriveKey(${JSON.stringify(PASS)}, salt, good.iters);
         const inner = JSON.parse(new TextDecoder().decode(await open(k, boxIn(good.box), "backup")));
@@ -551,32 +602,36 @@ async function main() {
       return c.evalJs("document.getElementById('restore-error').textContent");
     }
 
-    // Five refusal shapes, all of which must write nothing at all: an
-    // old (never-shipped) format, a tampered outer envelope, a plain wrong
-    // passphrase, and two envelopes that open cleanly but whose CONTENT is
-    // wrong (a bad entry hash, a stripped state box faking an empty vault).
-    const notABackupMsg = await attemptRestore(oldFormatFile, PASS);
-    check("restore: pre-fix (v1) format reads as not-a-backup, not a half-parse", notABackupMsg.length > 0, notABackupMsg);
-    check("restore: refusing an old-format file writes nothing", (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
-
-    await attemptRestore(outerTamperedFile, PASS);
-    check("restore: a tampered OUTER envelope is refused even with the right passphrase", (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
-
-    await attemptRestore(goodBackupFile, "wrong passphrase entirely");
-    check("restore: wrong passphrase is refused, loud", (await c.evalJs("document.getElementById('restore-error').textContent")).length > 0);
-    check("restore: wrong passphrase writes nothing", (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
-
-    await attemptRestore(chainInvalidFile, PASS);
-    check("restore: a validly-resealed but chain-tampered backup is still refused", (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
-
-    await attemptRestore(hollowedFile, PASS);
-    check("restore: a validly-resealed backup with its state box stripped cannot pass as an empty vault", (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
+    // Eight refusal shapes, all of which must write nothing at all: an old
+    // (never-shipped) format, a tampered v2 envelope, a plain wrong
+    // passphrase, two v2 envelopes that open cleanly but whose CONTENT is
+    // wrong (a bad entry hash, a stripped state box faking an empty vault),
+    // and three damaged v3 files.
+    const NOT_A_BACKUP = "That file is not a Magpie sealed backup.";
+    const WRONG_PASS = "That passphrase does not open this backup.";
+    const DAMAGED = "This backup is damaged and cannot be restored.";
+    const CHAIN_INVALID = "This backup's chain does not verify. It may be tampered with, so it was refused.";
+    const refusals = [
+      ["pre-fix (v1) format reads as not-a-backup, not a half-parse", oldFormatFile, PASS, NOT_A_BACKUP],
+      ["a tampered v2 envelope is refused even with the right passphrase", outerTamperedFile, PASS, WRONG_PASS],
+      ["wrong passphrase on a v3 backup is refused, and named", goodBackupFile, "wrong passphrase entirely", WRONG_PASS],
+      ["a validly-resealed but chain-tampered backup is still refused", chainInvalidFile, PASS, CHAIN_INVALID],
+      ["a validly-resealed backup with its state box stripped cannot pass as an empty vault", hollowedFile, PASS, DAMAGED],
+      ["a v3 backup missing its last chunk is damaged", droppedLastFile, PASS, DAMAGED],
+      ["a v3 backup with two chunks swapped is damaged", swappedFile, PASS, DAMAGED],
+      ["a v3 backup with one ciphertext byte flipped is damaged", flippedFile, PASS, DAMAGED],
+    ];
+    for (const [what, file, pass, want] of refusals) {
+      const msg = await attemptRestore(file, pass);
+      check(`restore: ${what}`, msg === want, msg);
+      check(`restore: and writes nothing (${path.basename(file)})`, (await c.evalJs("__magpieApi.vault.isSetUp()", true)) === false);
+    }
 
     // ------------------- restore: a journal appears while it is running
     // A journal created during the restore's KDF (planted here) must survive, and the restore write nothing.
     const raced = await c.evalJs(
       `(async () => {
-        const bytes = new TextEncoder().encode(${JSON.stringify(backupBytes.toString("utf8"))});
+        const bytes = Uint8Array.from(atob(${JSON.stringify(backupB64)}), (ch) => ch.charCodeAt(0));
         const outcome = __magpieApi.vault.restoreBackup(bytes, ${JSON.stringify(PASS)}).then(() => "restored", (e) => e.code || String(e));
         const db = await new Promise((res, rej) => { const r = indexedDB.open("magpie"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
         await new Promise((res, rej) => { const t = db.transaction("meta", "readwrite"); t.objectStore("meta").put({ planted: true }, "kdf"); t.oncomplete = res; t.onabort = () => rej(t.error); });
@@ -591,6 +646,23 @@ async function main() {
     check("restore: a journal created mid-restore is not replaced", raced.result === "already-set-up" && raced.planted && raced.entries === 0, JSON.stringify(raced));
     await c.evalJs("__magpieApi.vault.wipe()", true);
 
+    // ------------------------------------------- restore: a v2 backup still restores
+    const v2Restored = await c.evalJs(
+      `(async () => {
+        const blob = new Blob([${JSON.stringify(JSON.stringify(goodV2))}]);
+        const { count } = await __magpieApi.vault.restoreBackup(blob, ${JSON.stringify(PASS)});
+        const res = await __magpieApi.vault.verify();
+        const file = await __magpieApi.vault.getFile(2);
+        __magpieApi.vault.lock();
+        return { count, ok: res.ok, verified: res.count, fileBytes: file.length };
+      })()`,
+      true,
+    );
+    check("restore: a v2 backup from 0.4.0 to 0.5.1 still restores and verifies", (
+      v2Restored.count === 4 && v2Restored.ok === true && v2Restored.verified === 4 && v2Restored.fileBytes > 768 * 1024
+    ), JSON.stringify(v2Restored));
+    await c.evalJs("__magpieApi.vault.wipe()", true);
+
     // --------------------------------- restore: correct backup succeeds
     const { root: rootGood } = (await c.send("DOM.getDocument")).result;
     const goodInput = (await c.send("DOM.querySelector", { nodeId: rootGood.nodeId, selector: "#restore-file" })).result;
@@ -602,15 +674,19 @@ async function main() {
     await waitFor(() => c.evalJs("__magpieApi.state.screen === 'timeline'"), "restored into timeline");
     check("restore: all entries come back", (await c.evalJs("document.querySelectorAll('#timeline li').length")) === 4);
     const restoreVerify = await c.evalJs("__magpieApi.vault.verify()", true);
-    check("restore: chain verifies after restore", restoreVerify.ok === true);
+    check("restore: chain verifies after restore", restoreVerify.ok === true && restoreVerify.count === 4, JSON.stringify(restoreVerify));
+    const restoredFile = await c.evalJs("__magpieApi.vault.getFile(2).then((f) => new TextDecoder().decode(f.subarray(0, 27)))", true);
+    check("restore: an attachment comes back byte for byte", restoredFile === CANARY_BYTES, restoredFile);
+    const restoredDump = await c.evalJs(DUMP_IDB, true);
+    check("at rest after restore: no title, note or attachment bytes in plaintext", (
+      !restoredDump.includes(CANARY_TITLE) && !restoredDump.includes("CANARY-NOTE-TEXT") && !restoredDump.includes(CANARY_BYTES) && restoredDump.length > 500
+    ));
 
-    // The five negative-control restore attempts above each deliberately
-    // push one logged error: expected, not a bug. Anything beyond those
-    // five is a real, unaccounted-for failure.
-    const errs = await c.evalJs("(__magpieErrors || []).slice(0, 12)");
+    // Each refused restore above deliberately logs one error: expected, not a bug. Anything beyond those is real.
+    const errs = await c.evalJs("(__magpieErrors || []).slice(0, 20)");
     const unexpected = errs.filter((e) => !/^restore: Error: (chain-invalid|wrong-passphrase|corrupt|not-a-backup)$/.test(e));
     check("no page errors across the whole run", unexpected.length === 0, JSON.stringify(errs));
-    check("restore negative controls logged exactly the expected refusals", errs.length === 5, JSON.stringify(errs));
+    check("restore negative controls logged exactly the expected refusals", errs.length === refusals.length, JSON.stringify(errs));
 
     // ------------------------------------- two tabs on the setup screen
     // Two tabs booted before any journal existed: the second setup must not replace the first.

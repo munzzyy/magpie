@@ -54,9 +54,10 @@ globalThis.__magpieOutDone = (id, status) => {
   if (resolve) resolve(String(status));
 };
 
-// An export is a Blob or bytes. Android slices bytes in place: WebView caps Blob storage, and a second export-sized Blob came back unreadable.
+// An export is a Blob, bytes, or a list of byte parts (a sealed backup). Android slices bytes in place: WebView caps Blob storage, and a second export-sized Blob came back unreadable.
+const partsOf = (data) => (Array.isArray(data) ? data : [data]);
 const sizeOf = (data) => (data instanceof Blob ? data.size : data.length);
-const asBlob = (data, type) => (data instanceof Blob ? data : new Blob([data], { type }));
+const asBlob = (data, type) => (data instanceof Blob ? data : new Blob(partsOf(data), { type }));
 const bytesOf = async (data, at = 0, end = sizeOf(data)) =>
   data instanceof Blob ? new Uint8Array(await data.slice(at, end).arrayBuffer()) : data.subarray(at, end);
 
@@ -67,8 +68,10 @@ async function handOff(data, name, type, mode) {
   const id = bridge.beginOut(name, type, mode);
   if (!id) throw new HandOffError("refused");
   try {
-    for (let at = 0; at < sizeOf(data); at += OUT_CHUNK_BYTES) {
-      if (!bridge.appendOut(id, toBase64(await bytesOf(data, at, at + OUT_CHUNK_BYTES)))) throw new HandOffError("write failed");
+    for (const part of partsOf(data)) {
+      for (let at = 0; at < sizeOf(part); at += OUT_CHUNK_BYTES) {
+        if (!bridge.appendOut(id, toBase64(await bytesOf(part, at, at + OUT_CHUNK_BYTES)))) throw new HandOffError("write failed");
+      }
     }
   } catch (err) {
     try {
@@ -85,7 +88,7 @@ async function handOff(data, name, type, mode) {
 }
 
 async function postToIOS(bridge, data, name, type) {
-  bridge.postMessage({ name, mime: type, b64: toBase64(await bytesOf(data)) });
+  bridge.postMessage({ name, mime: type, b64: toBase64(await bytesOf(Array.isArray(data) ? asBlob(data, type) : data)) });
 }
 
 export async function shareOut(data, name, type = data.type || "application/octet-stream") {
@@ -100,7 +103,7 @@ export async function shareOut(data, name, type = data.type || "application/octe
   }
   if (isIOSWrapped()) return false;
   if (navigator.canShare) {
-    const file = new File([data], name, { type });
+    const file = new File(partsOf(data), name, { type });
     if (navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file] });

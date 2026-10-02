@@ -127,6 +127,28 @@ test("Android: bytes are sliced in place, with the type passed in", async () => 
   assert.deepEqual(Buffer.concat(log.chunks.map((c) => Buffer.from(c, "base64"))), Buffer.from(bytes));
 });
 
+// A sealed backup arrives as a list of parts, one per sealed chunk, and none may be joined into one buffer on the way.
+const backupParts = () => {
+  const { bytes } = bigBlob();
+  return [bytes.subarray(0, 300), bytes.subarray(300, 300 + OUT_CHUNK_BYTES + 5), bytes.subarray(300 + OUT_CHUNK_BYTES + 5)];
+};
+
+test("Android: a backup's parts go out in order, each sliced on its own", async () => {
+  const log = fakeAndroid();
+  const parts = backupParts();
+  assert.equal(await saveOut(parts, "magpie-backup-abcd.magpiebackup", "application/json"), "native");
+  assert.deepEqual(log.chunks.map((c) => Buffer.from(c, "base64").length), [300, OUT_CHUNK_BYTES, 5, OUT_CHUNK_BYTES, OUT_CHUNK_BYTES, 12345 - 305]);
+  assert.deepEqual(Buffer.concat(log.chunks.map((c) => Buffer.from(c, "base64"))), Buffer.concat(parts));
+  assert.deepEqual(log.finished, ["a1b2"]);
+});
+
+test("iOS bridge: a backup's parts are posted whole", async () => {
+  const posted = fakeIOSBridge();
+  const parts = backupParts();
+  assert.equal(await saveOut(parts, "magpie-backup-abcd.magpiebackup", "application/json"), "ios-share");
+  assert.deepEqual(Buffer.from(posted[0].b64, "base64"), Buffer.concat(parts));
+});
+
 test("Android: shareOut asks for the share sheet and reports success once it opened", async () => {
   const log = fakeAndroid();
   assert.equal(await shareOut(bigBlob().blob, "x.zip"), true);

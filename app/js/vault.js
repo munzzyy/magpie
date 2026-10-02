@@ -72,27 +72,6 @@ const get = (store, k) =>
       }),
   );
 
-// Every {key, value} pair in a store, in cursor order, read inside one
-// transaction so a concurrent write cannot interleave a partial view.
-const getAllWithKeys = (store) =>
-  idb().then(
-    (d) =>
-      new Promise((resolve, reject) => {
-        const out = [];
-        const req = d.transaction(store).objectStore(store).openCursor();
-        req.onsuccess = () => {
-          const cursor = req.result;
-          if (cursor) {
-            out.push({ key: cursor.key, value: cursor.value });
-            cursor.continue();
-          } else {
-            resolve(out);
-          }
-        };
-        req.onerror = () => reject(req.error);
-      }),
-  );
-
 // count(), not get(): checking that an attachment exists must not read every sealed file out of storage.
 const missingFiles = (seqs) =>
   idb().then(
@@ -349,17 +328,12 @@ export async function wipe() {
 
 // -------------------------------------------------------------- backup
 
-// A sealed backup is ONE encrypted envelope: every record is unpacked from
-// IndexedDB, bundled into a single plaintext blob, and sealed as one
-// AES-GCM box under the live vault key. Nothing about that bundle is
-// visible from outside the box, not the entry count, not the per-entry
-// hashes, not the head, not when it was made: the only plaintext left in
-// the file is the KDF salt and iteration count, which have to stay
-// readable to derive a key from a passphrase at all, exactly like the
-// vault's own meta.kdf record already is. Restoring needs the exact
-// passphrase that sealed it: deriving the wrong key and failing to open
-// this envelope look identical, on purpose, because AES-GCM cannot (and
-// should not be made to) tell "wrong key" apart from "tampered ciphertext".
+// v3 file: a JSON header line (salt, iters, chunk, a random id, the sealed check box), then chunks of
+// IV + AES-GCM(chunk bytes, fewer in the last) under AAD backup:<id>:<index>:last|more. Inside them, records
+// of a 4-byte big-endian length + JSON: meta, then a file record plus its ciphertext per attachment, then end.
+const BACKUP_CHUNK = 512 * 1024;
+const HEADER_MAX = 4096;
+const backupAad = (id, index, last) => `backup:${id}:${index}:${last ? "last" : "more"}`;
 
 const toB64 = (bytes) => {
   // Chunked because String.fromCharCode(...bigArray) blows the argument limit
@@ -374,45 +348,211 @@ const toB64 = (bytes) => {
 const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const boxOut = (box) => ({ iv: toB64(box.iv), ct: toB64(box.ct) });
 const boxIn = (o) => ({ iv: fromB64(o.iv), ct: fromB64(o.ct) });
+const isBox = (o) => typeof o?.iv === "string" && typeof o?.ct === "string";
 
-export async function exportBackup() {
-  guard();
-  const kdf = await get("meta", "kdf");
-  const state = await get("meta", "state");
-  const anchor = await get("meta", "anchor");
-  const entryRows = await getAllWithKeys("entries");
-  const fileRows = await getAllWithKeys("files");
-  const inner = {
-    kdf: { check: boxOut(kdf.check) },
-    state: state ? boxOut(state) : null,
-    anchor: anchor ? boxOut(anchor) : null,
-    entries: entryRows.map(({ key: seq, value }) => ({ seq, hash: value.hash, box: boxOut(value.box) })),
-    files: fileRows.map(({ key: seq, value }) => ({ seq, box: boxOut(value) })),
-    generated_at: new Date().toISOString(),
+// The small records in one transaction, so a write from another tab cannot land between them.
+const snapshot = () =>
+  idb().then(
+    (d) =>
+      new Promise((resolve, reject) => {
+        const t = d.transaction(["meta", "entries", "files"]);
+        const out = { entries: [], fileSeqs: [] };
+        const meta = t.objectStore("meta");
+        for (const name of ["kdf", "state", "anchor"]) {
+          const req = meta.get(name);
+          req.onsuccess = () => {
+            out[name] = req.result ?? null;
+          };
+        }
+        const cursor = t.objectStore("entries").openCursor();
+        cursor.onsuccess = () => {
+          const c = cursor.result;
+          if (!c) return;
+          out.entries.push({ seq: c.key, hash: c.value.hash, box: boxOut(c.value.box) });
+          c.continue();
+        };
+        const keys = t.objectStore("files").getAllKeys();
+        keys.onsuccess = () => {
+          out.fileSeqs = keys.result;
+        };
+        t.oncomplete = () => resolve(out);
+        t.onerror = () => reject(t.error);
+      }),
+  );
+
+function chunkSealer(k, id) {
+  const parts = [];
+  const buf = new Uint8Array(BACKUP_CHUNK);
+  let fill = 0;
+  const sealChunk = async (last) => {
+    const box = await seal(k, buf.subarray(0, fill), backupAad(id, parts.length, last));
+    const part = new Uint8Array(box.iv.length + box.ct.length);
+    part.set(box.iv);
+    part.set(box.ct, box.iv.length);
+    parts.push(part);
+    fill = 0;
   };
-  const outer = await seal(key, new TextEncoder().encode(JSON.stringify(inner)), "backup");
-  const out = {
-    format: "magpie-backup",
-    v: 2,
-    salt: toB64(kdf.salt),
-    iters: kdf.iters,
-    box: boxOut(outer),
+  const push = async (bytes) => {
+    for (let at = 0; at < bytes.length; ) {
+      // A full chunk is sealed only once more bytes arrive, so the last one is never empty.
+      if (fill === BACKUP_CHUNK) await sealChunk(false);
+      const take = Math.min(bytes.length - at, BACKUP_CHUNK - fill);
+      buf.set(bytes.subarray(at, at + take), fill);
+      fill += take;
+      at += take;
+    }
   };
-  return new TextEncoder().encode(JSON.stringify(out));
+  const record = async (obj, payload) => {
+    const json = new TextEncoder().encode(JSON.stringify(obj));
+    const n = json.length;
+    await push(new Uint8Array([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]));
+    await push(json);
+    if (payload) await push(payload);
+  };
+  const finish = async () => {
+    await sealChunk(true);
+    return parts;
+  };
+  return { record, finish };
 }
 
-// Restores a sealed backup, but only onto a device with no journal yet: a
-// silent overwrite of a live vault is worse than refusing. The outer
-// envelope is opened first; only once that succeeds does anything inside
-// it exist in memory, and the chain is recomputed and every attachment
-// opened BEFORE anything reaches storage, so a tampered or corrupt backup
-// writes nothing at all, not even a partial vault.
-export async function restoreBackup(bytes, passphrase) {
-  if (await isSetUp()) throw new RestoreBlockedError("already-set-up");
+// A list of byte parts, not a Blob: WebView caps Blob storage, so only the web download makes one.
+export async function exportBackup() {
+  guard();
+  const k = key;
+  const snap = await snapshot();
+  const id = toB64(randomBytes(16));
+  const header = {
+    format: "magpie-backup",
+    v: 3,
+    salt: toB64(snap.kdf.salt),
+    iters: snap.kdf.iters,
+    chunk: BACKUP_CHUNK,
+    id,
+    check: boxOut(snap.kdf.check),
+  };
+  const out = chunkSealer(k, id);
+  await out.record({
+    t: "meta",
+    state: snap.state ? boxOut(snap.state) : null,
+    anchor: snap.anchor ? boxOut(snap.anchor) : null,
+    entries: snap.entries,
+    generated_at: new Date().toISOString(),
+  });
+  for (const seq of snap.fileSeqs) {
+    guard();
+    const box = await get("files", seq);
+    if (!box) throw new Error(`file ${seq} vanished during the backup`);
+    await out.record({ t: "file", seq, iv: toB64(box.iv), n: box.ct.length }, box.ct);
+  }
+  await out.record({ t: "end" });
+  return [new TextEncoder().encode(JSON.stringify(header) + "\n"), ...(await out.finish())];
+}
 
+// One chunk in memory at a time; a chunk moved, dropped or wrongly marked last fails to open.
+function chunkReader(blob, start, h, k) {
+  const sealed = h.chunk + 12 + 16;
+  const total = Math.ceil((blob.size - start) / sealed);
+  let index = 0;
+  let cur = new Uint8Array(0);
+  let pos = 0;
+  const next = async () => {
+    if (index >= total) return false;
+    const at = start + index * sealed;
+    const raw = new Uint8Array(await blob.slice(at, at + sealed).arrayBuffer());
+    cur = await open(k, { iv: raw.subarray(0, 12), ct: raw.subarray(12) }, backupAad(h.id, index, index === total - 1));
+    index++;
+    pos = 0;
+    return true;
+  };
+  const bytes = async (n) => {
+    if (!Number.isInteger(n) || n < 0 || n > blob.size) throw new Error("bad length");
+    const out = new Uint8Array(n);
+    for (let got = 0; got < n; ) {
+      if (pos === cur.length && !(await next())) throw new Error("ends early");
+      const take = Math.min(n - got, cur.length - pos);
+      out.set(cur.subarray(pos, pos + take), got);
+      got += take;
+      pos += take;
+    }
+    return out;
+  };
+  const record = async () => {
+    const b = await bytes(4);
+    return JSON.parse(new TextDecoder().decode(await bytes(b[0] * 0x1000000 + (b[1] << 16) + (b[2] << 8) + b[3])));
+  };
+  const done = () => index === total && pos === cur.length;
+  return { bytes, record, done };
+}
+
+async function keyFor(passphrase, salt, iters) {
+  try {
+    const s = fromB64(salt);
+    return { salt: s, k: await deriveKey(passphrase, s, iters) };
+  } catch {
+    throw new RestoreBlockedError("not-a-backup");
+  }
+}
+
+async function readV3(blob, headerBytes, start, passphrase) {
+  let h;
+  try {
+    h = JSON.parse(new TextDecoder().decode(headerBytes));
+  } catch {
+    throw new RestoreBlockedError("not-a-backup");
+  }
+  if (
+    h?.format !== "magpie-backup" ||
+    h.v !== 3 ||
+    typeof h.salt !== "string" ||
+    !Number.isFinite(h.iters) ||
+    !Number.isInteger(h.chunk) ||
+    h.chunk < 1024 ||
+    h.chunk > 16 * 1024 * 1024 ||
+    typeof h.id !== "string" ||
+    !isBox(h.check)
+  ) {
+    throw new RestoreBlockedError("not-a-backup");
+  }
+  const { salt, k } = await keyFor(passphrase, h.salt, h.iters);
+  try {
+    if ((await openText(k, boxIn(h.check), "check")) !== CHECK_TEXT) throw new Error("check");
+  } catch {
+    throw new RestoreBlockedError("wrong-passphrase");
+  }
+
+  try {
+    const r = chunkReader(blob, start, h, k);
+    const meta = await r.record();
+    if (meta?.t !== "meta" || !Array.isArray(meta.entries)) throw new Error("no meta");
+    const files = new Map();
+    for (;;) {
+      const rec = await r.record();
+      if (rec?.t === "end") break;
+      if (rec?.t !== "file" || !Number.isInteger(rec.seq) || typeof rec.iv !== "string") throw new Error("bad record");
+      files.set(rec.seq, { iv: fromB64(rec.iv), ct: await r.bytes(rec.n) });
+    }
+    if (!r.done()) throw new Error("trailing chunks");
+    return {
+      k,
+      salt,
+      iters: h.iters,
+      check: boxIn(h.check),
+      state: isBox(meta.state) ? boxIn(meta.state) : null,
+      anchor: isBox(meta.anchor) ? boxIn(meta.anchor) : null,
+      entries: meta.entries.map((e) => ({ seq: e.seq, hash: e.hash, box: boxIn(e.box) })),
+      files,
+    };
+  } catch {
+    throw new RestoreBlockedError("corrupt");
+  }
+}
+
+// v2 (0.4.0 to 0.5.1) is one JSON object around one sealed box, and those files are out there for good.
+async function readV2(blob, passphrase) {
   let parsed;
   try {
-    parsed = JSON.parse(new TextDecoder().decode(bytes));
+    parsed = JSON.parse(await blob.text());
   } catch {
     throw new RestoreBlockedError("not-a-backup");
   }
@@ -421,61 +561,75 @@ export async function restoreBackup(bytes, passphrase) {
     parsed.v !== 2 ||
     typeof parsed.salt !== "string" ||
     !Number.isFinite(parsed.iters) ||
-    typeof parsed.box?.iv !== "string" ||
-    typeof parsed.box?.ct !== "string"
+    !isBox(parsed.box)
   ) {
     // Also what an untouched v1 (pre-outer-envelope) backup file hits: that
     // format never shipped, and there is no migration path for it.
     throw new RestoreBlockedError("not-a-backup");
   }
+  const { salt, k } = await keyFor(passphrase, parsed.salt, parsed.iters);
 
-  let salt, k;
-  try {
-    salt = fromB64(parsed.salt);
-    k = await deriveKey(passphrase, salt, parsed.iters);
-  } catch {
-    throw new RestoreBlockedError("not-a-backup");
-  }
-
+  // Deriving the wrong key and failing to open this envelope look the same, on purpose: AES-GCM cannot tell them apart.
   let inner;
   try {
-    const plaintext = await open(k, boxIn(parsed.box), "backup");
-    inner = JSON.parse(new TextDecoder().decode(plaintext));
+    inner = JSON.parse(new TextDecoder().decode(await open(k, boxIn(parsed.box), "backup")));
   } catch {
     throw new RestoreBlockedError("wrong-passphrase");
   }
+  if (!inner || typeof inner !== "object" || !isBox(inner.kdf?.check)) throw new RestoreBlockedError("corrupt");
+  const check = boxIn(inner.kdf.check);
+  try {
+    if ((await openText(k, check, "check")) !== CHECK_TEXT) throw new Error("check");
+    return {
+      k,
+      salt,
+      iters: parsed.iters,
+      check,
+      state: isBox(inner.state) ? boxIn(inner.state) : null,
+      anchor: isBox(inner.anchor) ? boxIn(inner.anchor) : null,
+      entries: (inner.entries || []).map((e) => ({ seq: e.seq, hash: e.hash, box: boxIn(e.box) })),
+      files: new Map((inner.files || []).map((f) => [f.seq, boxIn(f.box)])),
+    };
+  } catch {
+    throw new RestoreBlockedError("corrupt");
+  }
+}
+
+// Restores a sealed backup, but only onto a device with no journal yet: a
+// silent overwrite of a live vault is worse than refusing. The chain is
+// recomputed and every attachment opened BEFORE anything reaches storage,
+// so a tampered or corrupt backup writes nothing at all, not even a
+// partial vault.
+export async function restoreBackup(file, passphrase) {
+  if (await isSetUp()) throw new RestoreBlockedError("already-set-up");
+  const blob = file instanceof Blob ? file : new Blob([file]);
+  const first = new Uint8Array(await blob.slice(0, HEADER_MAX).arrayBuffer());
+  // JSON.stringify never writes a raw newline, so a v2 file has none.
+  const newline = first.indexOf(10);
+  if (newline < 0 && !new TextDecoder().decode(first).startsWith('{"format":"magpie-backup"')) throw new RestoreBlockedError("not-a-backup");
+  const b = newline < 0 ? await readV2(blob, passphrase) : await readV3(blob, first.subarray(0, newline), newline + 1, passphrase);
 
   // A genuine backup always carries a state box: setup() writes one in the
   // same breath it writes the KDF record. One stripped out is a hollowed-out
   // tamper wearing an empty vault's clothes, not a legitimately empty vault,
   // and the outer envelope opening cleanly does not excuse it.
-  if (!inner || typeof inner !== "object" || !inner.kdf?.check || !inner.state) {
-    throw new RestoreBlockedError("corrupt");
-  }
-
-  let checkText;
-  try {
-    checkText = await openText(k, boxIn(inner.kdf.check), "check");
-  } catch {
-    throw new RestoreBlockedError("corrupt");
-  }
-  if (checkText !== CHECK_TEXT) throw new RestoreBlockedError("corrupt");
+  if (!b.state) throw new RestoreBlockedError("corrupt");
 
   const decrypted = [];
-  for (const e of inner.entries || []) {
+  for (const e of b.entries) {
     let entry;
     try {
-      entry = JSON.parse(await openText(k, boxIn(e.box), `entry:${e.seq}`));
+      entry = JSON.parse(await openText(b.k, e.box, `entry:${e.seq}`));
     } catch {
       throw new RestoreBlockedError("corrupt");
     }
     decrypted.push({ entry, hash: e.hash });
   }
-  decrypted.sort((a, b) => a.entry.seq - b.entry.seq);
+  decrypted.sort((x, y) => x.entry.seq - y.entry.seq);
 
   let recordedHead;
   try {
-    recordedHead = JSON.parse(await openText(k, boxIn(inner.state), "state")).head;
+    recordedHead = JSON.parse(await openText(b.k, b.state, "state")).head;
   } catch {
     throw new RestoreBlockedError("corrupt");
   }
@@ -490,13 +644,12 @@ export async function restoreBackup(bytes, passphrase) {
   // A green chain over a hollowed-out backup is the same failure mode
   // verify() already refuses to certify: every entry that claims a file
   // must actually have one, and it must open.
-  const fileMap = new Map((inner.files || []).map((f) => [f.seq, f.box]));
   for (const { entry } of decrypted) {
     if (!entry.file) continue;
-    const box = fileMap.get(entry.seq);
+    const box = b.files.get(entry.seq);
     if (!box) throw new RestoreBlockedError("corrupt");
     try {
-      await open(k, boxIn(box), `file:${entry.seq}`);
+      await open(b.k, box, `file:${entry.seq}`);
     } catch {
       throw new RestoreBlockedError("corrupt");
     }
@@ -507,11 +660,11 @@ export async function restoreBackup(bytes, passphrase) {
   try {
     await new Promise((resolve, reject) => {
       const t = d.transaction(["meta", "entries", "files"], "readwrite");
-      t.objectStore("meta").add({ salt, iters: parsed.iters, check: boxIn(inner.kdf.check) }, "kdf");
-      t.objectStore("meta").put(boxIn(inner.state), "state");
-      if (inner.anchor) t.objectStore("meta").put(boxIn(inner.anchor), "anchor");
-      for (const e of inner.entries || []) t.objectStore("entries").put({ box: boxIn(e.box), hash: e.hash }, e.seq);
-      for (const f of inner.files || []) t.objectStore("files").put(boxIn(f.box), f.seq);
+      t.objectStore("meta").add({ salt: b.salt, iters: b.iters, check: b.check }, "kdf");
+      t.objectStore("meta").put(b.state, "state");
+      if (b.anchor) t.objectStore("meta").put(b.anchor, "anchor");
+      for (const e of b.entries) t.objectStore("entries").put({ box: e.box, hash: e.hash }, e.seq);
+      for (const [seq, box] of b.files) t.objectStore("files").put(box, seq);
       t.oncomplete = resolve;
       t.onabort = () => reject(t.error);
     });
@@ -520,7 +673,7 @@ export async function restoreBackup(bytes, passphrase) {
     throw err;
   }
 
-  key = k;
+  key = b.k;
   head = result.head;
   count = result.count;
   try {

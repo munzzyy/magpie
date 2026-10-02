@@ -156,8 +156,10 @@ not run on.
   encoding is tested by forcing that encoding on Linux.
 - A pass on real phones. The Android export, backup and share-in changes
   were measured on an Android 13 emulator with a 192 MB app memory limit.
-  The iOS wrapper still hands an export over in one piece, and nobody has
-  measured where that runs out on an iPhone.
+  The backup format that came after them, written in 512 KB pieces, has
+  only run in desktop Chromium so far. The iOS wrapper still hands an
+  export over in one piece, and nobody has measured where that runs out on
+  an iPhone.
 - A native speaker's read of the Spanish added since 0.5.1: the plural
   forms for shared files, days since an export, entries since the anchor
   and restored entries.

@@ -59,6 +59,16 @@
   still hands the export over in one piece and was not measured.
 - If Android kills the page's renderer, say for memory, Magpie comes back on
   the lock screen instead of closing.
+- A sealed backup was built as one long piece of text, close to twice the
+  size of the attachments in it, and read back the same way. In Chromium,
+  sealing a journal with three videos near the 50 MB cap crashed the page,
+  so the 0.4.2 note below, that a backup carries its attachments "no matter
+  how big they are", was wrong. Backups are written and read in sealed
+  pieces of 512 KB now, one attachment at a time. A test journal of six such
+  videos (about 300 MB) backs up and restores into an empty browser. A
+  backup with a piece missing, two pieces swapped or one byte changed is
+  refused as damaged. Backups from 0.4.0 to 0.5.1 still restore, but a
+  backup made from now on needs this version or newer to restore.
 - The chain check behind the badge read every sealed attachment out of
   storage just to see that it was there, each time the timeline was drawn.
   It counts them instead now, so a journal full of photos and videos stops
