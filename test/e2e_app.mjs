@@ -493,6 +493,34 @@ async function main() {
     await c.evalJs("document.getElementById('btn-add-cancel').click(); 'ok'");
     for (const f of bigPick) rmSync(f, { force: true });
 
+    // ------------------------------------------ verify reads no attachment
+    // Existence is a count(); pulling every sealed file through IndexedDB on each timeline paint is what this guards against.
+    const verifyReads = await c.evalJs(`(async () => {
+      let reads = 0;
+      const saved = {};
+      for (const m of ["get", "getAll", "openCursor"]) {
+        saved[m] = IDBObjectStore.prototype[m];
+        IDBObjectStore.prototype[m] = function (...args) {
+          if (this.name === "files") reads++;
+          return saved[m].apply(this, args);
+        };
+      }
+      try {
+        const res = await __magpieApi.vault.verify();
+        return { ok: res.ok, count: res.count, reads };
+      } finally {
+        Object.assign(IDBObjectStore.prototype, saved);
+      }
+    })()`, true);
+    check("verify: no attachment is read to check that it exists", verifyReads.reads === 0 && verifyReads.ok === true && verifyReads.count === 4, JSON.stringify(verifyReads));
+    const hollowed2 = await c.evalJs(`(async () => {
+      const db = await new Promise((res, rej) => { const r = indexedDB.open("magpie"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+      await new Promise((res, rej) => { const t = db.transaction("files", "readwrite"); t.objectStore("files").delete(3); t.oncomplete = res; t.onabort = () => rej(t.error); });
+      db.close();
+      return __magpieApi.vault.verify();
+    })()`, true);
+    check("verify: an entry whose sealed file is gone breaks the chain at that entry", hollowed2.ok === false && hollowed2.badSeq === 3, JSON.stringify(hollowed2));
+
     // ------------------------------------------------------------- wipe
     await c.evalJs(`(() => {
       document.querySelector(".danger").open = true;

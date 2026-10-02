@@ -59,6 +59,10 @@
   still hands the export over in one piece and was not measured.
 - If Android kills the page's renderer, say for memory, Magpie comes back on
   the lock screen instead of closing.
+- The chain check behind the badge read every sealed attachment out of
+  storage just to see that it was there, each time the timeline was drawn.
+  It counts them instead now, so a journal full of photos and videos stops
+  paying for a full read every time it is saved to, opened or verified.
 
 ## 0.5.1
 

@@ -93,6 +93,24 @@ const getAllWithKeys = (store) =>
       }),
   );
 
+// count(), not get(): checking that an attachment exists must not read every sealed file out of storage.
+const missingFiles = (seqs) =>
+  idb().then(
+    (d) =>
+      new Promise((resolve, reject) => {
+        const store = d.transaction("files").objectStore("files");
+        const missing = [];
+        for (const seq of seqs) {
+          const req = store.count(seq);
+          req.onsuccess = () => {
+            if (!req.result) missing.push(seq);
+          };
+        }
+        store.transaction.oncomplete = () => resolve(missing.sort((a, b) => a - b));
+        store.transaction.onerror = () => reject(store.transaction.error);
+      }),
+  );
+
 const guard = () => {
   if (!key) throw new LockedError();
 };
@@ -304,11 +322,8 @@ export async function verify() {
   if (rows.length !== count) {
     return { ok: false, head, count: rows.length, badSeq: rows.length + 1 };
   }
-  for (const { entry } of rows) {
-    if (entry.file && !(await get("files", entry.seq))) {
-      return { ok: false, head, count: rows.length, badSeq: entry.seq };
-    }
-  }
+  const missing = await missingFiles(rows.filter((r) => r.entry.file).map((r) => r.entry.seq));
+  if (missing.length) return { ok: false, head, count: rows.length, badSeq: missing[0] };
   return verifyChain(
     rows.map((r) => r.entry),
     rows.map((r) => r.hash),
