@@ -38,7 +38,7 @@ on Android 9 or newer. Magpie is not in the Play Store yet, so Android
 will warn you about installing from outside it; that warning is expected
 for any app distributed this way, not a sign something is wrong. The link
 always points at the current release, so a release-tracking installer
-(e.g. [Tern](https://github.com/munzzyy/tern)) can update it
+(e.g. [Tern](https://tern.munzzyy.dev)) can update it
 automatically without going through a store.
 
 On Android 9 it works, but know two things. Google stopped shipping
@@ -133,6 +133,38 @@ It needs only Python. It skips the signature files, checks every other
 entry's name, order, compression and bytes, and prints SAME or lists what
 differs. A build of the v0.5.1 tag matches the published magpie-0.5.1.apk
 on all 104 entries.
+
+## Roadmap
+
+What is left needs someone or something outside this repo's code: a
+release, an outside reviewer, a native speaker, or hardware the code has
+not run on.
+
+- A release. The fixes under Unreleased in the [CHANGELOG](CHANGELOG.md)
+  are not in one yet. Until they are, the Android app can fail to save an
+  export or a sealed backup holding one large video without saying so, and
+  the verify.py inside an export can call a genuine export tampered with on
+  Windows (run it as `py -X utf8 verify.py` there).
+- An independent review of the hash chain, the encryption, verify.py and
+  the Android bridge. Magpie is only worth something if those claims hold,
+  and so far they have been checked by its own tests and by probing; the
+  verifier and Android export bugs under Unreleased turned up that way.
+  Start with `app/js/` (canon, chain, cryptobox, vault, export, zip) and the
+  two Kotlin files. [SECURITY.md](SECURITY.md) has the private route for
+  anything serious.
+- verify.py on a real Windows machine. The fix for Windows' default text
+  encoding is tested by forcing that encoding on Linux.
+- A pass on real phones. The Android export, backup and share-in changes
+  were measured on an Android 13 emulator with a 192 MB app memory limit.
+  The iOS wrapper still hands an export over in one piece, and nobody has
+  measured where that runs out on an iPhone.
+- A native speaker's read of the Spanish added since 0.5.1: the plural
+  forms for shared files, days since an export, entries since the anchor
+  and restored entries.
+- A CI job that rebuilds each release APK and runs `tools/compare-apk.py`
+  against the published one. It needs a run on GitHub to show CI's build
+  matches before anyone leans on it. Until then the independent check is
+  F-Droid's, or your own.
 
 ## Bugs, holes, contributions
 
