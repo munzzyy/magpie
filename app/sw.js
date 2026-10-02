@@ -1,7 +1,7 @@
 // Magpie service worker. Offline shell and share-target hand-off only.
 // Journal data lives in IndexedDB, encrypted, and never touches a cache.
 
-const VERSION = "magpie-v0.5.1";
+const VERSION = "magpie-v0.6.0";
 const SHARE_CACHE = "magpie-share";
 // Same cap as MAX_ATTACH_BYTES in js/main.js.
 const MAX_ATTACH_BYTES = 50 * 1024 * 1024;

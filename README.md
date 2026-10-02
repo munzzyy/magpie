@@ -136,19 +136,13 @@ on all 104 entries.
 
 ## Roadmap
 
-What is left needs someone or something outside this repo's code: a
-release, an outside reviewer, a native speaker, or hardware the code has
-not run on.
+What is left needs someone or something outside this repo's code: an
+outside reviewer, a native speaker, or hardware the code has not run on.
 
-- A release. The fixes under Unreleased in the [CHANGELOG](CHANGELOG.md)
-  are not in one yet. Until they are, the Android app can fail to save an
-  export or a sealed backup holding one large video without saying so, and
-  the verify.py inside an export can call a genuine export tampered with on
-  Windows (run it as `py -X utf8 verify.py` there).
 - An independent review of the hash chain, the encryption, verify.py and
   the Android bridge. Magpie is only worth something if those claims hold,
   and so far they have been checked by its own tests and by probing; the
-  verifier and Android export bugs under Unreleased turned up that way.
+  verifier and Android export bugs fixed in 0.6.0 turned up that way.
   Start with `app/js/` (canon, chain, cryptobox, vault, export, zip) and the
   two Kotlin files. [SECURITY.md](SECURITY.md) has the private route for
   anything serious.

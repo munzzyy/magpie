@@ -1,0 +1,1 @@
+Backups made with this version need 0.6.0 or newer to restore. Exporting or backing up a journal with big videos no longer runs out of memory, a shared file keeps its name, and auto-lock waits the minute it shows. verify.py reads UTF-8 on Windows, checks an export against a shared head hash with --anchor, and is harder to fool.

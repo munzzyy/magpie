@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+Big journals make it out of the app, and verify.py is harder to fool.
+
+Sealed backups have a new format. A backup made with 0.6.0 needs 0.6.0 or
+newer to restore; older backups still restore here.
 
 - verify.py read an export in the computer's default text encoding. On
   Windows with Python 3.14 or older that is not UTF-8, so a genuine export

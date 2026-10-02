@@ -8,7 +8,7 @@ import { isWrapper, wrapperVersion, shareOut, saveOut, canCapture, capturePhoto,
 import { isBundled } from "./env.js";
 import { setLocale, resolveLocale, translateDom, currentLocale, t, tn, LOCALE_CHOICES } from "./i18n.js";
 
-const VERSION = "0.5.1";
+const VERSION = "0.6.0";
 
 globalThis.__magpieErrors = [];
 window.addEventListener("error", (ev) => __magpieErrors.push(String(ev.message)));
