@@ -21,8 +21,12 @@ jobs:
       - name: e2e in chromium
         run: |
           sudo apt-get update -q
-          sudo apt-get install -qy chromium-browser
-          sudo ln -sf "$(command -v chromium-browser)" /usr/local/bin/chromium
+          # The runner image ships Chrome; the apt chromium-browser package is a snap
+          # shim whose install fails at random, so it is only the fallback.
+          chrome="$(command -v google-chrome-stable || command -v google-chrome || true)"
+          if [ -z "$chrome" ]; then sudo apt-get install -qy chromium-browser; chrome="$(command -v chromium-browser)"; fi
+          sudo ln -sf "$chrome" /usr/local/bin/chromium
+          chromium --version
           npm run e2e
 
   android:
