@@ -130,6 +130,8 @@ class MagpieBridge(private val activity: MainActivity) {
     }
 
     private fun saveToDownloads(out: Out): Boolean = runCatching {
+        // MediaStore.Downloads is Android 10+; on 9 the caller falls back to the share sheet.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@runCatching false
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, out.name)
             put(MediaStore.Downloads.MIME_TYPE, out.mime)
